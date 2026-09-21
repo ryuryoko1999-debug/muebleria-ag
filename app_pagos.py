@@ -10,7 +10,7 @@ st.set_page_config(page_title="Mueblería A&G - Gestión de Pagos", page_icon="�
 st.title("🪑 Mueblería A&G - Registro de Pagos")
 
 # Enlace público de tu Google Sheet
-GSHEET_URL = "https://drive.google.com/file/d/127KsbwQz4pK3xme97VhMtHQGclDfgNRy/view?usp=sharing/edit"
+GSHEET_URL = "https://docs.google.com/spreadsheets/d/1boPTg4KSnNYBgI-hFwVWBgf_jst-wRl9IBFLLAY9GqE/edit?usp=sharing"
 
 # Conexión con Google Sheets
 conn = st.connection("gsheets", type=GSheetsConnection)
