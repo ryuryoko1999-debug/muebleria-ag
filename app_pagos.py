@@ -84,7 +84,7 @@ else:
     CSV_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid={GID}"
     
     # ⚠️ REEMPLAZAR CON TU URL DE APPS SCRIPT
-    SCRIPT_URL = "https://script.google.com/macros/s/TU_SCRIPT_ID_AQUI/exec"
+    SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyarQpV1w8XWaAwAcUQ7NXpvOkYkuHi-lXYOnmoDJoENncjJlZQPrepzUyeonhOHUEN-A/exec"
 
     # ==========================================
     # MÓDULO 1: REGISTRAR PAGO
