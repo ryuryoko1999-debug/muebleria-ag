@@ -8,17 +8,17 @@ st.set_page_config(page_title="Mueblería A&G - Gestión de Pagos", page_icon="�
 
 st.title("🪑 Mueblería A&G - Registro de Pagos")
 
-# Identificador de tu archivo e ID numérico de la solapa 'clientes' (gid=409487884)
-SHEET_ID = "127KsbwQz4pK3xme97VhMtHQGclDfgNRy/view?usp=sharing"
+# Identificador de tu Hoja de Google Sheets y de la pestaña 'clientes' (gid=409487884)
+SHEET_ID = "1boPTg4KSnNYBgI-hFwVWBgf_jst-wRl9IBFLLAY9GqE"
 GID = "409487884"
 
-# URL de exportación directa a CSV utilizando el GID exacto
+# URL de exportación directa a CSV
 CSV_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid={GID}"
 
 @st.cache_data(ttl=0)  # ttl=0 para leer datos actualizados en tiempo real
 def cargar_datos():
     try:
-        # Leer el CSV directamente desde Google Sheets (encabezados en la fila 3 -> header=2)
+        # Leer el CSV directamente desde Google Sheets (los encabezados están en la fila 3 -> header=2)
         df = pd.read_csv(CSV_URL, header=2)
         df.columns = [str(col).strip() for col in df.columns]
         return df
@@ -30,7 +30,7 @@ df = cargar_datos()
 
 if df is not None:
     # Modo Diagnóstico
-    with st.expander("🔍 Modo Diagnóstico: Ver tabla leída de Google Sheets"):
+    with st.expander("🔍 Modo Diagnóstico: Ver datos de la planilla"):
         st.write("**Columnas detectadas:**", list(df.columns))
         st.dataframe(df)
 
