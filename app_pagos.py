@@ -6,92 +6,104 @@ from datetime import datetime, date
 from dateutil.relativedelta import relativedelta
 from fpdf import FPDF
 
-# Configuración de página con estilos CSS personalizados
-st.set_page_config(page_title="Mueblería A&G - Panel de Gestión", page_icon="🪑", layout="centered")
+# Configuración de página adaptada a móviles
+st.set_page_config(page_title="Mueblería A&G", page_icon="🪑", layout="centered", initial_sidebar_state="collapsed")
 
-# --- ESTILOS CSS PERSONALIZADOS (Diseño Móvil / Premium) ---
+# Estilos CSS optimizados para dispositivos móviles (Negro y Naranja)
 st.markdown("""
     <style>
-    /* Estilo general y botones */
+    /* Estilos responsive */
+    .stApp {
+        background-color: #0d0d0d;
+        color: #f5f5f5;
+    }
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 8px;
+        background-color: #1a1a1a;
+        padding: 8px;
+        border-radius: 12px;
+    }
+    .stTabs [data-baseweb="tab"] {
+        height: 50px;
+        white-space: pre-wrap;
+        background-color: #262626;
+        border-radius: 8px;
+        color: #ffffff;
+        font-weight: bold;
+    }
+    .stTabs [aria-selected="true"] {
+        background-color: #ff6600 !important;
+        color: #ffffff !important;
+    }
     .stButton>button {
+        background-color: #ff6600;
+        color: white;
         border-radius: 10px;
-        font-weight: 600;
-        transition: all 0.3s ease;
+        font-weight: bold;
+        border: none;
+        height: 48px;
     }
     .stButton>button:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-    }
-    /* Tarjetas de información */
-    .card-info {
-        background-color: #f8f9fa;
-        border-left: 5px solid #1f3a52;
-        padding: 15px;
-        border-radius: 8px;
-        margin-bottom: 15px;
-    }
-    /* Encabezados laterales */
-    [data-testid="stSidebar"] {
-        background-color: #1f3a52;
+        background-color: #e65c00;
         color: white;
     }
-    [data-testid="stSidebar"] * {
-        color: white !important;
+    div[data-testid="stMetricValue"] {
+        color: #ff6600;
+        font-size: 28px;
+        font-weight: bold;
     }
     </style>
 """, unsafe_allow_html=True)
 
-# --- CONTROL DE SESIÓN (LOGIN) ---
+# --- CONTROL DE SESIÓN ---
 if "autenticado" not in st.session_state:
     st.session_state["autenticado"] = False
 
 def pantalla_login():
-    st.markdown("<h2 style='text-align: center;'>🪑 Mueblería A&G</h2>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align: center; color: #666;'>Sistema Interno de Gestión de Cobros</p>", unsafe_allow_html=True)
+    st.markdown("<h2 style='text-align: center; color: #ff6600;'>🪑 MUEBLERÍA A&G</h2>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; color: #aaa;'>Gestión Móvil de Cobros</p>", unsafe_allow_html=True)
     st.markdown("---")
     
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
-        usuario = st.text_input("👤 Usuario")
-        contrasena = st.text_input("🔑 Contraseña", type="password")
-        
-        if st.button("🔓 Iniciar Sesión", type="primary", use_container_width=True):
-            if usuario.strip().lower() == "muebleriaag" and contrasena == "ayg":
-                st.session_state["autenticado"] = True
-                st.success("¡Bienvenido!")
-                st.rerun()
-            else:
-                st.error("❌ Credenciales incorrectas")
+    usuario = st.text_input("👤 Usuario")
+    contrasena = st.text_input("🔑 Contraseña", type="password")
+    
+    if st.button("🔓 INICIAR SESIÓN", type="primary", use_container_width=True):
+        if usuario.strip().lower() == "muebleriaag" and contrasena == "ayg":
+            st.session_state["autenticado"] = True
+            st.rerun()
+        else:
+            st.error("❌ Credenciales incorrectas")
 
 if not st.session_state["autenticado"]:
     pantalla_login()
 else:
-    # --- MENÚ DE NAVEGACIÓN EN SIDEBAR ---
-    st.sidebar.markdown("### 🪑 Mueblería A&G")
-    st.sidebar.caption("Posadas, Misiones")
-    st.sidebar.markdown("---")
-    
-    opcion = st.sidebar.radio("Navegación", ["💳 Registrar Pago", "👤 Registrar Cliente"])
-    
-    st.sidebar.markdown("---")
-    if st.sidebar.button("🚪 Cerrar Sesión", use_container_width=True):
-        st.session_state["autenticado"] = False
-        st.rerun()
+    # Encabezado principal
+    col_head1, col_head2 = st.columns([3, 1])
+    with col_head1:
+        st.markdown("<h3 style='margin:0; color:#ff6600;'>🪑 Mueblería A&G</h3>", unsafe_allow_html=True)
+    with col_head2:
+        if st.button("🚪 Salir", use_container_width=True):
+            st.session_state["autenticado"] = False
+            st.rerun()
 
-    # Enlaces de Google Sheets
+    st.markdown("---")
+
+    # Enlaces de Google Sheets y Apps Script
     SHEET_ID = "1boPTg4KSnNYBgI-hFwVWBgf_jst-wRl9IBFLLAY9GqE"
     GID = "409487884"
     CSV_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid={GID}"
     
-    # ⚠️ REEMPLAZAR CON TU URL DE APPS SCRIPT
+    # ⚠️ PEGA AQUÍ TU URL DE APPS SCRIPT
     SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyarQpV1w8XWaAwAcUQ7NXpvOkYkuHi-lXYOnmoDJoENncjJlZQPrepzUyeonhOHUEN-A/exec"
+
+    # --- PESTAÑAS SUPERIORES DIRECTAS PARA CELULAR ---
+    tab_pago, tab_cliente = st.tabs(["💳 REGISTRAR PAGO", "👤 NUEVO CLIENTE"])
 
     # ==========================================
     # MÓDULO 1: REGISTRAR PAGO
     # ==========================================
-    if opcion == "💳 Registrar Pago":
-        st.title("💳 Registro de Cobros")
-        st.caption("Gestiona los pagos de cuotas e imprime comprobantes al instante.")
+    with tab_pago:
+        st.subheader("💳 Registrar Cobro")
 
         @st.cache_data(ttl=0)
         def cargar_datos():
@@ -100,7 +112,7 @@ else:
                 df.columns = [str(col).strip() for col in df.columns]
                 return df
             except Exception as e:
-                st.error(f"Error al conectar con Google Sheets: {e}")
+                st.error(f"Error al conectar con la planilla: {e}")
                 return None
 
         df = cargar_datos()
@@ -114,7 +126,7 @@ else:
             col_fecha = next((c for c in df.columns if any(p in c.upper() for p in ["FECHA", "VENC"])), None)
 
             if not all([col_cliente, col_cuota, col_estado, col_monto]):
-                st.error("⚠️ Estructura de tabla no válida en Google Sheets.")
+                st.error("⚠️ Error en la estructura de columnas.")
             else:
                 df[col_cliente] = df[col_cliente].replace(r'^\s*$', None, regex=True).ffill()
                 if col_mueble:
@@ -126,11 +138,8 @@ else:
 
                 clientes = sorted(df_valid[col_cliente].unique())
 
-                col_fecha_pago, col_sel_cli = st.columns([1, 2])
-                with col_fecha_pago:
-                    fecha_pago = st.date_input("Fecha de Cobro", value=date.today())
-                with col_sel_cli:
-                    cliente_sel = st.selectbox(f"Cliente ({len(clientes)} activos)", options=[""] + clientes)
+                fecha_pago = st.date_input("Fecha de Cobro", value=date.today())
+                cliente_sel = st.selectbox(f"Seleccionar Cliente ({len(clientes)} activos)", options=[""] + clientes)
 
                 if cliente_sel:
                     m_cliente = df_valid[col_cliente].str.upper() == cliente_sel.upper()
@@ -140,10 +149,10 @@ else:
                     cuotas_pendientes = df_valid[m_cliente & m_pendiente]
 
                     if cuotas_pendientes.empty:
-                        st.success(f"🎉 El cliente **{cliente_sel}** no tiene cuotas pendientes.")
+                        st.success(f"🎉 **{cliente_sel}** está al día (sin cuotas pendientes).")
                     else:
                         opciones_cuota = cuotas_pendientes[col_cuota].astype(str).str.strip().tolist()
-                        cuota_sel = st.selectbox("Seleccionar Cuota a Cobrar", options=opciones_cuota)
+                        cuota_sel = st.selectbox("Cuota Pendiente", options=opciones_cuota)
 
                         if cuota_sel:
                             fila_cuota = cuotas_pendientes[cuotas_pendientes[col_cuota].astype(str).str.strip() == cuota_sel].iloc[0]
@@ -165,16 +174,16 @@ else:
                                 porcentaje_mora = 0.01 * dias_atraso
                                 monto_mora = monto_base * porcentaje_mora
                                 monto_total = monto_base + monto_mora
-                                st.warning(f"⚠️ **Atraso de {dias_atraso} días** (Vencía: {fecha_venc.strftime('%d/%m/%Y')}). Mora 1% diario: **+${monto_mora:,.2f}**")
+                                st.warning(f"⚠️ **{dias_atraso} días de atraso.** Recargo 1% diario: **+${monto_mora:,.2f}**")
                             else:
                                 dias_atraso = 0
                                 monto_mora = 0.0
                                 monto_total = monto_base
-                                st.info("✅ Pago a término sin recargos.")
+                                st.info("✅ Pago en término.")
 
                             st.metric(label="Monto Final a Cobrar", value=f"$ {monto_total:,.2f}")
 
-                            if st.button("🚀 Registrar Pago y Generar Comprobante PDF", type="primary", use_container_width=True):
+                            if st.button("🚀 CONFIRMAR PAGO Y GENERAR PDF", use_container_width=True):
                                 excel_row = int(fila_cuota.name) + 4
                                 exito_guardado = False
                                 
@@ -186,7 +195,7 @@ else:
                                     except Exception as e:
                                         st.error(f"Error al conectar con Google Sheets: {e}")
 
-                                # Generación de comprobante PDF
+                                # PDF Comprobante
                                 num_comprobante = f"REC-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
                                 pdf = FPDF()
                                 pdf.add_page()
@@ -240,14 +249,14 @@ else:
                                 pdf.output(pdf_filename)
 
                                 if exito_guardado:
-                                    st.success("🎉 ¡Pago registrado en Google Sheets y PDF listo!")
+                                    st.success("🎉 ¡Pago guardado en Google Sheets y PDF listo!")
                                     st.cache_data.clear()
                                 else:
-                                    st.info("📄 Comprobante PDF generado correctamente.")
+                                    st.info("📄 Comprobante PDF generado.")
 
                                 with open(pdf_filename, "rb") as file:
                                     st.download_button(
-                                        label="📥 Descargar Comprobante PDF",
+                                        label="📥 DESCARGAR COMPROBANTE PDF",
                                         data=file,
                                         file_name=pdf_filename,
                                         mime="application/pdf",
@@ -257,9 +266,8 @@ else:
     # ==========================================
     # MÓDULO 2: REGISTRAR CLIENTE
     # ==========================================
-    elif opcion == "👤 Registrar Cliente":
-        st.title("👤 Alta de Nuevo Cliente")
-        st.caption("Carga los datos de la venta para proyectar automáticamente el plan de cuotas.")
+    with tab_cliente:
+        st.subheader("👤 Alta de Nuevo Cliente")
 
         @st.cache_data(ttl=0)
         def obtener_siguiente_id():
@@ -275,40 +283,42 @@ else:
             return 1
 
         nuevo_id = obtener_siguiente_id()
-        st.info(f"🆔 **ID Asignado Automáticamente:** `{nuevo_id:04d}`")
+        st.markdown(f"🆔 **ID Asignado:** `{nuevo_id:04d}`")
 
-        with st.form("form_nuevo_cliente", clear_on_submit=False):
-            col_a, col_b = st.columns(2)
-            with col_a:
-                nombre_cliente = st.text_input("Nombre Completo del Cliente")
-                mueble_concepto = st.text_input("Mueble / Producto Vendido")
-                monto_cuota = st.number_input("Monto por Cuota ($)", min_value=1.0, value=50000.0, step=1000.0)
+        # CÁLCULOS DINÁMICOS EN TIEMPO REAL (FUERA DEL FORMULARIO)
+        nombre_cliente = st.text_input("Nombre Completo del Cliente")
+        mueble_concepto = st.text_input("Mueble / Producto Vendido")
+        
+        c_monto, c_cuotas = st.columns(2)
+        with c_monto:
+            monto_cuota = st.number_input("Monto por Cuota ($)", min_value=1.0, value=50000.0, step=1000.0)
+        with c_cuotas:
+            num_cuotas = st.selectbox("Cantidad de Cuotas", options=list(range(1, 21)), index=5)
 
-            with col_b:
-                num_cuotas = st.selectbox("Cantidad de Cuotas", options=list(range(1, 21)), index=5)
-                dia_vencimiento = st.selectbox("Día de Vencimiento de Cobro", options=list(range(1, 31)), index=9)
-                fecha_primer_venc = st.date_input("Fecha del 1º Vencimiento", value=date.today())
+        c_dia, c_fecha = st.columns(2)
+        with c_dia:
+            dia_vencimiento = st.selectbox("Día de Cobro (1-30)", options=list(range(1, 31)), index=9)
+        with c_fecha:
+            fecha_primer_venc = st.date_input("Fecha 1º Vencimiento", value=date.today())
 
-            monto_total_venta = monto_cuota * num_cuotas
-            st.markdown(f"**💰 Total de la Venta proyectado:** `${monto_total_venta:,.2f}`")
+        # TOTAL EN TIEMPO REAL
+        total_venta_calculado = float(monto_cuota) * int(num_cuotas)
+        st.markdown("---")
+        st.metric(label="💰 Total de la Venta Proyectado", value=f"$ {total_venta_calculado:,.2f}")
 
-            btn_guardar = st.form_submit_button("💾 Guardar Cliente y Generar Cuotas", type="primary", use_container_width=True)
-
-        if btn_guardar:
+        if st.button("💾 GUARDAR CLIENTE Y PLAN DE CUOTAS", use_container_width=True, type="primary"):
             if not nombre_cliente.strip() or not mueble_concepto.strip():
                 st.error("⚠️ Por favor completa el Nombre del Cliente y el Mueble/Producto.")
             else:
-                # Generar el arreglo de cuotas (Idéntico a la Macro de Excel)
                 cuotas_list = []
                 meses_es = ["ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO", "JULIO", "AGOSTO", "SEPTIEMBRE", "OCTUBRE", "NOVIEMBRE", "DICIEMBRE"]
                 
                 for i in range(1, num_cuotas + 1):
                     fecha_cuota = fecha_primer_venc + relativedelta(months=i-1)
-                    # Ajustar el día seleccionado
                     try:
                         fecha_cuota = fecha_cuota.replace(day=dia_vencimiento)
                     except ValueError:
-                        fecha_cuota = fecha_cuota.replace(day=28) # Evitar errores en febrero
+                        fecha_cuota = fecha_cuota.replace(day=28)
 
                     nombre_mes = meses_es[fecha_cuota.month - 1]
 
@@ -323,16 +333,15 @@ else:
                         "estado": "Pendiente"
                     })
 
-                # Enviar datos al Apps Script
                 if "script.google.com" in SCRIPT_URL:
                     try:
-                        payload = {"action": "nuevo_cliente", "data": json.dumps(cuotas_list)}
-                        res = requests.get(SCRIPT_URL, params=payload, timeout=15)
+                        payload = json.dumps({"action": "nuevo_cliente", "cuotas": cuotas_list})
+                        res = requests.post(SCRIPT_URL, data=payload, headers={'Content-Type': 'application/json'}, timeout=15)
                         if res.status_code == 200 and "OK" in res.text:
-                            st.success(f"🎉 ¡Cliente **{nombre_cliente.upper()}** registrado exitosamente con {num_cuotas} cuotas!")
+                            st.success(f"🎉 ¡Cliente **{nombre_cliente.upper()}** guardado exitosamente con {num_cuotas} cuotas!")
                             st.cache_data.clear()
                         else:
-                            st.error(f"Error al guardar en Google Sheets: {res.text}")
+                            st.error(f"Respuesta de Google Sheets: {res.text}")
                     except Exception as e:
                         st.error(f"Error de conexión: {e}")
                 else:
