@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import requests
 from datetime import datetime, date
 from fpdf import FPDF
 
@@ -8,17 +9,18 @@ st.set_page_config(page_title="Mueblería A&G - Gestión de Pagos", page_icon="�
 
 st.title("🪑 Mueblería A&G - Registro de Pagos")
 
-# Identificador de tu Hoja de Google Sheets y de la pestaña 'clientes' (gid=409487884)
 SHEET_ID = "1boPTg4KSnNYBgI-hFwVWBgf_jst-wRl9IBFLLAY9GqE"
 GID = "409487884"
 
-# URL de exportación directa a CSV
+# URL de lectura CSV
 CSV_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid={GID}"
 
-@st.cache_data(ttl=0)  # ttl=0 para leer datos actualizados en tiempo real
+# ⚠️ PEGA AQUÍ LA URL QUE OBTUVISTE EN EL PASO 3 (Google Apps Script)
+SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyarQpV1w8XWaAwAcUQ7NXpvOkYkuHi-lXYOnmoDJoENncjJlZQPrepzUyeonhOHUEN-A/exec"
+
+@st.cache_data(ttl=0)
 def cargar_datos():
     try:
-        # Leer el CSV directamente desde Google Sheets (los encabezados están en la fila 3 -> header=2)
         df = pd.read_csv(CSV_URL, header=2)
         df.columns = [str(col).strip() for col in df.columns]
         return df
@@ -34,7 +36,6 @@ if df is not None:
         st.write("**Columnas detectadas:**", list(df.columns))
         st.dataframe(df)
 
-    # Identificación inteligente de columnas
     col_cliente = next((c for c in df.columns if "CLIENTE" in c.upper()), None)
     col_cuota = next((c for c in df.columns if "CUOTA" in c.upper()), None)
     col_estado = next((c for c in df.columns if "ESTADO" in c.upper()), None)
@@ -43,9 +44,9 @@ if df is not None:
     col_fecha = next((c for c in df.columns if any(p in c.upper() for p in ["FECHA", "VENC"])), None)
 
     if not all([col_cliente, col_cuota, col_estado, col_monto]):
-        st.error("⚠️ No se detectaron las columnas requeridas (CLIENTE, CUOTA, ESTADO, MONTO). Revisa el 'Modo Diagnóstico'.")
+        st.error("⚠️ No se detectaron las columnas requeridas. Revisa el 'Modo Diagnóstico'.")
     else:
-        # Rellenar celdas combinadas/vacías hacia abajo (ffill)
+        # Rellenar celdas combinadas/vacías hacia abajo
         df[col_cliente] = df[col_cliente].replace(r'^\s*$', None, regex=True).ffill()
         if col_mueble:
             df[col_mueble] = df[col_mueble].ffill()
@@ -63,7 +64,7 @@ if df is not None:
         if cliente_sel:
             m_cliente = df_valid[col_cliente].str.upper() == cliente_sel.upper()
             
-            # Criterio de cuotas pendientes
+            # Cuotas pendientes
             estado_str = df_valid[col_estado].astype(str).str.strip().str.lower()
             m_pendiente = ~estado_str.isin(['pagado', 'pago', 'cancelado', 'cobrado'])
             
@@ -79,14 +80,13 @@ if df is not None:
                     fila_cuota = cuotas_pendientes[cuotas_pendientes[col_cuota].astype(str).str.strip() == cuota_sel].iloc[0]
                     mueble = str(fila_cuota[col_mueble]) if col_mueble and pd.notna(fila_cuota[col_mueble]) else "Mueble / Servicio"
 
-                    # Limpieza de importe
                     try:
                         monto_raw = str(fila_cuota[col_monto]).replace('$', '').replace('.', '').replace(',', '.').strip()
                         monto_base = float(monto_raw)
                     except:
                         monto_base = float(fila_cuota[col_monto])
 
-                    # Recargo de mora del 1% diario si venció
+                    # Recargo por mora (1% diario)
                     try:
                         fecha_venc = pd.to_datetime(fila_cuota[col_fecha]).date()
                         dias_atraso = (fecha_pago - fecha_venc).days
@@ -106,8 +106,25 @@ if df is not None:
 
                     st.metric(label="Monto Final a Cobrar", value=f"$ {monto_total:,.2f}")
 
-                    if st.button("🚀 Generar Comprobante PDF", type="primary"):
-                        # Generación del recibo PDF
+                    if st.button("🚀 Registrar Pago y Generar PDF", type="primary"):
+                        # Número de fila exacto en Google Sheets (índice pandas + 4)
+                        excel_row = int(fila_cuota.name) + 4
+
+                        # 1. Enviar orden de actualización a Google Sheets vía Apps Script
+                        exito_guardado = False
+                        if "script.google.com" in SCRIPT_URL:
+                            try:
+                                res = requests.get(SCRIPT_URL, params={"row": excel_row, "estado": "pagado"}, timeout=10)
+                                if res.status_code == 200 and "OK" in res.text:
+                                    exito_guardado = True
+                                else:
+                                    st.error("No se pudo actualizar Google Sheets. Verifica la URL del Apps Script.")
+                            except Exception as e:
+                                st.error(f"Error al conectar con el script de actualización: {e}")
+                        else:
+                            st.warning("⚠️ Debes colocar la URL de tu Apps Script en la variable `SCRIPT_URL`.")
+
+                        # 2. Generación del recibo PDF
                         num_comprobante = f"REC-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
                         pdf = FPDF()
                         pdf.add_page()
@@ -168,7 +185,12 @@ if df is not None:
                         pdf_filename = f"Comprobante_{cliente_sel.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
                         pdf.output(pdf_filename)
 
-                        st.success("🎉 ¡Comprobante PDF generado exitosamente!")
+                        if exito_guardado:
+                            st.success("🎉 ¡Pago registrado con éxito en Google Sheets y PDF generado!")
+                            st.cache_data.clear()
+                        else:
+                            st.info("📄 Comprobante PDF generado correctamente.")
+
                         with open(pdf_filename, "rb") as file:
                             st.download_button(
                                 label="📥 Descargar Comprobante PDF",
