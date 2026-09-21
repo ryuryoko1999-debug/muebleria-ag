@@ -2,23 +2,24 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime, date
 from fpdf import FPDF
-from streamlit_gsheets import GSheetsConnection
 
-# Configuración de la ventana en el celular/navegador
+# Configuración de la interfaz
 st.set_page_config(page_title="Mueblería A&G - Gestión de Pagos", page_icon="🪑", layout="centered")
 
 st.title("🪑 Mueblería A&G - Registro de Pagos")
 
-# URL oficial de tu Hoja de Google Sheets
-GSHEET_URL = "https://docs.google.com/spreadsheets/d/1boPTg4KSnNYBgI-hFwVWBgf_jst-wRl9IBFLLAY9GqE/edit?usp=sharingt"
+# Identificador de tu archivo e ID numérico de la solapa 'clientes' (gid=409487884)
+SHEET_ID = "127KsbwQz4pK3xme97VhMtHQGclDfgNRy/view?usp=sharing"
+GID = "409487884"
 
-# Conexión con Google Sheets
-conn = st.connection("gsheets", type=GSheetsConnection)
+# URL de exportación directa a CSV utilizando el GID exacto
+CSV_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid={GID}"
 
+@st.cache_data(ttl=0)  # ttl=0 para leer datos actualizados en tiempo real
 def cargar_datos():
     try:
-        # Leer la hoja 'clientes' ignorando la caché (ttl=0 para tiempo real)
-        df = conn.read(spreadsheet=GSHEET_URL, worksheet="clientes", header=2, ttl=0)
+        # Leer el CSV directamente desde Google Sheets (encabezados en la fila 3 -> header=2)
+        df = pd.read_csv(CSV_URL, header=2)
         df.columns = [str(col).strip() for col in df.columns]
         return df
     except Exception as e:
@@ -29,11 +30,11 @@ df = cargar_datos()
 
 if df is not None:
     # Modo Diagnóstico
-    with st.expander("🔍 Modo Diagnóstico: Ver planilla leída"):
+    with st.expander("🔍 Modo Diagnóstico: Ver tabla leída de Google Sheets"):
         st.write("**Columnas detectadas:**", list(df.columns))
         st.dataframe(df)
 
-    # Detección inteligente de columnas
+    # Identificación inteligente de columnas
     col_cliente = next((c for c in df.columns if "CLIENTE" in c.upper()), None)
     col_cuota = next((c for c in df.columns if "CUOTA" in c.upper()), None)
     col_estado = next((c for c in df.columns if "ESTADO" in c.upper()), None)
@@ -42,9 +43,9 @@ if df is not None:
     col_fecha = next((c for c in df.columns if any(p in c.upper() for p in ["FECHA", "VENC"])), None)
 
     if not all([col_cliente, col_cuota, col_estado, col_monto]):
-        st.error("⚠️ No se detectaron correctamente las columnas principales. Revisa la opción 'Modo Diagnóstico'.")
+        st.error("⚠️ No se detectaron las columnas requeridas (CLIENTE, CUOTA, ESTADO, MONTO). Revisa el 'Modo Diagnóstico'.")
     else:
-        # Rellenar celdas combinadas/vacías hacia abajo
+        # Rellenar celdas combinadas/vacías hacia abajo (ffill)
         df[col_cliente] = df[col_cliente].replace(r'^\s*$', None, regex=True).ffill()
         if col_mueble:
             df[col_mueble] = df[col_mueble].ffill()
@@ -85,7 +86,7 @@ if df is not None:
                     except:
                         monto_base = float(fila_cuota[col_monto])
 
-                    # Recargo de mora del 1% diario si superó el vencimiento
+                    # Recargo de mora del 1% diario si venció
                     try:
                         fecha_venc = pd.to_datetime(fila_cuota[col_fecha]).date()
                         dias_atraso = (fecha_pago - fecha_venc).days
@@ -105,15 +106,8 @@ if df is not None:
 
                     st.metric(label="Monto Final a Cobrar", value=f"$ {monto_total:,.2f}")
 
-                    if st.button("🚀 Registrar Pago y Generar PDF", type="primary"):
-                        # Actualizar estado a pagado
-                        idx = fila_cuota.name
-                        df.loc[idx, col_estado] = "pagado"
-
-                        # Guardar actualización en Google Sheets
-                        conn.update(spreadsheet=GSHEET_URL, worksheet="clientes", data=df)
-
-                        # Generación del comprobante PDF
+                    if st.button("🚀 Generar Comprobante PDF", type="primary"):
+                        # Generación del recibo PDF
                         num_comprobante = f"REC-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
                         pdf = FPDF()
                         pdf.add_page()
@@ -174,7 +168,7 @@ if df is not None:
                         pdf_filename = f"Comprobante_{cliente_sel.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
                         pdf.output(pdf_filename)
 
-                        st.success("🎉 ¡Pago guardado en Google Sheets y PDF generado correctamente!")
+                        st.success("🎉 ¡Comprobante PDF generado exitosamente!")
                         with open(pdf_filename, "rb") as file:
                             st.download_button(
                                 label="📥 Descargar Comprobante PDF",
@@ -182,4 +176,3 @@ if df is not None:
                                 file_name=pdf_filename,
                                 mime="application/pdf"
                             )
-                
