@@ -2,19 +2,64 @@ import streamlit as st
 import pandas as pd
 import requests
 import json
+import hashlib
+import secrets
+import time
 from datetime import datetime, date
 from dateutil.relativedelta import relativedelta
 from fpdf import FPDF
 
-# Configuración de página adaptada a móviles
-st.set_page_config(page_title="Mueblería A&G", page_icon="🪑", layout="centered", initial_sidebar_state="collapsed")
+# ============================================================
+# CONFIGURACIÓN Y CREDENCIALES (Adaptado a tu sistema de login)
+# ============================================================
+APP_NAME = "MUEBLERÍA A&G"
 
-# Estilos CSS optimizados para dispositivos móviles (Negro y Naranja)
+# Diccionario de usuarios iniciales (Usuario simulando tu base de datos)
+# Puedes agregar más usuarios con contraseñas seguras aquí si lo deseas
+if "usuarios_db" not in st.session_state:
+    # Generamos hash para la clave inicial por defecto 'AG2026' para admin y 'ayg' para muebleriaag
+    salt_admin = secrets.token_hex(32)
+    hash_admin = hashlib.pbkdf2_hmac("sha256", "AG2026".encode("utf-8"), salt_admin.encode("utf-8"), 200000).hex()
+    
+    salt_vend = secrets.token_hex(32)
+    hash_vend = hashlib.pbkdf2_hmac("sha256", "ayg".encode("utf-8"), salt_vend.encode("utf-8"), 200000).hex()
+
+    st.session_state["usuarios_db"] = {
+        "admin": {
+            "nombre": "Administrador A&G",
+            "password_hash": hash_admin,
+            "salt": salt_admin,
+            "rol": "admin",
+            "activo": True,
+            "intentos": 0,
+            "bloqueado_hasta": 0
+        },
+        "muebleriaag": {
+            "nombre": "Mueblería A&G",
+            "password_hash": hash_vend,
+            "salt": salt_vend,
+            "rol": "vendedor",
+            "activo": True,
+            "intentos": 0,
+            "bloqueado_hasta": 0
+        }
+    }
+
+if "registro_accesos" not in st.session_state:
+    st.session_state["registro_accesos"] = []
+
+MAX_INTENTOS = 5
+BLOQUEO_SEGUNDOS = 60
+
+# Configuración de página adaptada a móviles
+st.set_page_config(page_title=APP_NAME, page_icon="🪑", layout="centered", initial_sidebar_state="collapsed")
+
+# Estilos CSS optimizados con la paleta de tu código (Negro, Blanco y Naranja #FF7A00)
 st.markdown("""
     <style>
     .stApp {
-        background-color: #0d0d0d;
-        color: #f5f5f5;
+        background-color: #111111;
+        color: #FFFFFF;
     }
     .stTabs [data-baseweb="tab-list"] {
         gap: 6px;
@@ -32,11 +77,11 @@ st.markdown("""
         font-size: 13px;
     }
     .stTabs [aria-selected="true"] {
-        background-color: #ff6600 !important;
+        background-color: #FF7A00 !important;
         color: #ffffff !important;
     }
     .stButton>button {
-        background-color: #ff6600;
+        background-color: #FF7A00;
         color: white;
         border-radius: 10px;
         font-weight: bold;
@@ -44,11 +89,11 @@ st.markdown("""
         height: 48px;
     }
     .stButton>button:hover {
-        background-color: #e65c00;
+        background-color: #D95F00;
         color: white;
     }
     div[data-testid="stMetricValue"] {
-        color: #ff6600;
+        color: #FF7A00;
         font-size: 26px;
         font-weight: bold;
     }
@@ -58,32 +103,109 @@ st.markdown("""
 # --- CONTROL DE SESIÓN ---
 if "autenticado" not in st.session_state:
     st.session_state["autenticado"] = False
+if "usuario_actual" not in st.session_state:
+    st.session_state["usuario_actual"] = None
+if "nombre_actual" not in st.session_state:
+    st.session_state["nombre_actual"] = None
+if "rol_actual" not in st.session_state:
+    st.session_state["rol_actual"] = None
 
+def registrar_acceso_log(usuario, resultado):
+    st.session_state["registro_accesos"].insert(0, {
+        "usuario": usuario,
+        "resultado": resultado,
+        "fecha": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    })
+
+def verificar_password(password, password_hash, salt):
+    nuevo_hash = hashlib.pbkdf2_hmac(
+        "sha256",
+        password.encode("utf-8"),
+        salt.encode("utf-8"),
+        200000
+    ).hex()
+    return secrets.compare_digest(nuevo_hash, password_hash)
+
+# ============================================================
+# PANTALLA DE LOGIN (Diseño inspirado en tu interfaz)
+# ============================================================
 def pantalla_login():
-    st.markdown("<h2 style='text-align: center; color: #ff6600;'>🪑 MUEBLERÍA A&G</h2>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align: center; color: #aaa;'>Gestión Móvil de Cobros y Caja</p>", unsafe_allow_html=True)
-    st.markdown("---")
-    
-    usuario = st.text_input("👤 Usuario")
-    contrasena = st.text_input("🔑 Contraseña", type="password")
-    
-    if st.button("🔓 INICIAR SESIÓN", type="primary", use_container_width=True):
-        if usuario.strip().lower() == "muebleriaag" and contrasena == "ayg":
-            st.session_state["autenticado"] = True
-            st.rerun()
-        else:
-            st.error("❌ Credenciales incorrectas")
+    col1, col2, col3 = st.columns([1, 4, 1])
+    with col2:
+        st.markdown("<h1 style='text-align: center; color: #FF7A00; margin-bottom:0;'>A&G</h1>", unsafe_allow_html=True)
+        st.markdown("<h2 style='text-align: center; color: #FFFFFF; margin-top:0;'>MUEBLERÍA A&G</h2>", unsafe_allow_html=True)
+        st.markdown("<p style='text-align: center; color: #AAAAAA;'>Sistema de Gestión • Ventas, Clientes y Cuotas</p>", unsafe_allow_html=True)
+        st.markdown("---")
+        
+        with st.form("form_login_ag"):
+            st.markdown("<h3 style='color: #FF7A00;'>INICIAR SESIÓN</h3>", unsafe_allow_html=True)
+            usuario_input = st.text_input("USUARIO").strip().lower()
+            password_input = st.text_input("CONTRASEÑA", type="password")
+            
+            submit_btn = st.form_submit_button("INGRESAR", use_container_width=True)
+            
+            if submit_btn:
+                if not usuario_input or not password_input:
+                    st.warning("⚠️ Ingresá usuario y contraseña.")
+                elif usuario_input not in st.session_state["usuarios_db"]:
+                    registrar_acceso_log(usuario_input, "USUARIO_INEXISTENTE")
+                    st.error("❌ Usuario o contraseña incorrectos.")
+                else:
+                    user_data = st.session_state["usuarios_db"][usuario_input]
+                    
+                    if not user_data["activo"]:
+                        registrar_acceso_log(usuario_input, "CUENTA_DESACTIVADA")
+                        st.error("❌ Esta cuenta fue desactivada.")
+                    else:
+                        ahora = time.time()
+                        if user_data["bloqueado_hasta"] and ahora < user_data["bloqueado_hasta"]:
+                            restante = int(user_data["bloqueado_hasta"] - ahora)
+                            st.error(f"🔒 Cuenta bloqueada temporalmente. Esperá {restante} segundos.")
+                        else:
+                            if verificar_password(password_input, user_data["password_hash"], user_data["salt"]):
+                                # Reiniciar intentos
+                                user_data["intentos"] = 0
+                                user_data["bloqueado_hasta"] = 0
+                                
+                                registrar_acceso_log(usuario_input, "LOGIN_CORRECTO")
+                                st.session_state["autenticado"] = True
+                                st.session_state["usuario_actual"] = usuario_input
+                                st.session_state["nombre_actual"] = user_data["nombre"]
+                                st.session_state["rol_actual"] = user_data["rol"]
+                                st.rerun()
+                            else:
+                                user_data["intentos"] += 1
+                                if user_data["intentos"] >= MAX_INTENTOS:
+                                    user_data["bloqueado_hasta"] = time.time() + BLOQUEO_SEGUNDOS
+                                    user_data["intentos"] = 0
+                                    registrar_acceso_log(usuario_input, "CUENTA_BLOQUEADA")
+                                    st.error(f"🔒 Superaste el límite de intentos. Cuenta bloqueada por {BLOQUEO_SEGUNDOS} segundos.")
+                                else:
+                                    registrar_acceso_log(usuario_input, "PASSWORD_INCORRECTA")
+                                    restantes = MAX_INTENTOS - user_data["intentos"]
+                                    st.error(f"❌ Credenciales incorrectas. Intentos restantes: {restantes}")
 
 if not st.session_state["autenticado"]:
     pantalla_login()
 else:
-    # Encabezado principal
-    col_head1, col_head2 = st.columns([3, 1])
+    # ============================================================
+    # SISTEMA PRINCIPAL (Conexión a Planilla Excel / Google Sheets)
+    # ============================================================
+    
+    # Header estilo A&G
+    col_head1, col_head2, col_head3 = st.columns([2, 2, 1])
     with col_head1:
-        st.markdown("<h3 style='margin:0; color:#ff6600;'>🪑 Mueblería A&G</h3>", unsafe_allow_html=True)
+        st.markdown(f"<h3 style='margin:0; color:#FF7A00;'>🪑 A&G</h3><p style='margin:0; font-size:12px; color:#aaa;'>Bienvenido, <b>{st.session_state['nombre_actual']}</b></p>", unsafe_allow_html=True)
     with col_head2:
+        st.markdown(f"<p style='margin:5px 0 0 0; font-size:12px; text-align:right; color:#FF7A00;'><b>ROL: {st.session_state['rol_actual'].upper()}</b></p>", unsafe_allow_html=True)
+    with col_head2:
+        pass
+    with col_head3:
         if st.button("🚪 Salir", use_container_width=True, key="btn_salir"):
             st.session_state["autenticado"] = False
+            st.session_state["usuario_actual"] = None
+            st.session_state["nombre_actual"] = None
+            st.session_state["rol_actual"] = None
             st.rerun()
 
     st.markdown("---")
@@ -92,7 +214,6 @@ else:
     SHEET_ID = "1boPTg4KSnNYBgI-hFwVWBgf_jst-wRl9IBFLLAY9GqE"
     GID = "409487884"
     CSV_URL = f"https://docs.google.com/spreadsheets/d/{SHEET_ID}/export?format=csv&gid={GID}"
-    
     SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyarQpV1w8XWaAwAcUQ7NXpvOkYkuHi-lXYOnmoDJoENncjJlZQPrepzUyeonhOHUEN-A/exec"
 
     # --- 4 PESTAÑAS PRINCIPALES ---
@@ -551,7 +672,6 @@ else:
                                 tipo_m = str(m.get("tipo"))
                                 concepto_m = str(m.get("concepto"))
                                 
-                                # Formatear fecha de caja de forma limpia DD/MM/YYYY
                                 fecha_m_raw = m.get("fecha")
                                 dt_m = parse_fecha_flexible(fecha_m_raw)
                                 fecha_m = dt_m.strftime("%d/%m/%Y") if dt_m else str(fecha_m_raw)
