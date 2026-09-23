@@ -82,7 +82,7 @@ else:
     with col_head1:
         st.markdown("<h3 style='margin:0; color:#ff6600;'>🪑 Mueblería A&G</h3>", unsafe_allow_html=True)
     with col_head2:
-        if st.button("🚪 Salir", use_container_width=True):
+        if st.button("🚪 Salir", use_container_width=True, key="btn_salir"):
             st.session_state["autenticado"] = False
             st.rerun()
 
@@ -100,13 +100,31 @@ else:
         "💳 COBRAR", "👤 CLIENTE", "💰 CAJA & GASTOS", "📊 RESUMEN"
     ])
 
-    # Función auxiliar para convertir montos de texto a número de forma segura
+    # Funciones auxiliares
     def parse_monto(val):
         try:
             clean = str(val).replace('$', '').replace('.', '').replace(',', '.').strip()
             return float(clean)
         except:
             return 0.0
+
+    def parse_fecha_flexible(val):
+        if pd.isna(val) or str(val).strip() == "" or str(val).upper() in ["NAN", "NONE", "NAT"]:
+            return None
+        val_str = str(val).strip()
+        try:
+            if isinstance(val, (pd.Timestamp, datetime, date)):
+                return pd.to_datetime(val)
+            dt = pd.to_datetime(val_str, format='%Y-%m-%d', errors='coerce')
+            if pd.notna(dt):
+                return dt
+            dt = pd.to_datetime(val_str, format='%d/%m/%Y', errors='coerce')
+            if pd.notna(dt):
+                return dt
+            dt = pd.to_datetime(val_str, errors='coerce')
+            return dt if pd.notna(dt) else None
+        except:
+            return None
 
     @st.cache_data(ttl=0)
     def cargar_datos():
@@ -412,7 +430,7 @@ else:
                 registros_flujo = []
                 mes_idx_fc = meses_es.index(mes_sel_fc) + 1
 
-                # 1. Traer cobros de clientes pagados filtrados por la fecha real de pago (Columna J)
+                # 1. Traer cobros de clientes pagados filtrados por la fecha de pago (Columna J) o vencimiento
                 df_cli = cargar_datos()
                 if df_cli is not None:
                     col_cliente_c = next((c for c in df_cli.columns if "CLIENTE" in c.upper()), None)
@@ -420,6 +438,7 @@ else:
                     col_monto_c = next((c for c in df_cli.columns if "MONTO" in c.upper()), None)
                     col_cuota_c = next((c for c in df_cli.columns if "CUOTA" in c.upper()), None)
                     col_pago_c = next((c for c in df_cli.columns if "PAGO" in c.upper()), None)
+                    col_fecha_c = next((c for c in df_cli.columns if any(p in c.upper() for p in ["FECHA", "VENC"])), None)
 
                     if col_cliente_c and col_estado_c and col_monto_c:
                         df_cli[col_cliente_c] = df_cli[col_cliente_c].replace(r'^\s*$', None, regex=True).ffill()
@@ -434,24 +453,22 @@ else:
                             cliente_nom = str(row[col_cliente_c]).strip().upper()
                             cuota_str = str(row[col_cuota_c]) if col_cuota_c else "Cuota"
                             
-                            # Verificar si la fecha de pago de la columna J coincide con el mes y año consultado
-                            if col_pago_c and pd.notna(row[col_pago_c]) and str(row[col_pago_c]).strip() != "":
-                                val_fecha = str(row[col_pago_c]).strip()
-                                try:
-                                    dt_pago = pd.to_datetime(val_fecha, format='%d/%m/%Y', errors='coerce')
-                                    if pd.isna(dt_pago):
-                                        dt_pago = pd.to_datetime(val_fecha, errors='coerce')
-                                    
-                                    if pd.notna(dt_pago) and dt_pago.month == mes_idx_fc and dt_pago.year == int(anio_sel_fc):
-                                        registros_flujo.append({
-                                            "Fecha": dt_pago.strftime("%d/%m/%Y"),
-                                            "Categoría": "📥 Cobro de Cuota",
-                                            "Detalle": f"Cliente: {cliente_nom} ({cuota_str})",
-                                            "Ingreso (+)": monto_num,
-                                            "Egreso (-)": 0.0
-                                        })
-                                except:
-                                    pass
+                            dt_pago = None
+                            if col_pago_c and col_pago_c in row:
+                                dt_pago = parse_fecha_flexible(row[col_pago_c])
+                            
+                            # Fallback a fecha de cuota si la columna J está vacía
+                            if not dt_pago and col_fecha_c and col_fecha_c in row:
+                                dt_pago = parse_fecha_flexible(row[col_fecha_c])
+
+                            if dt_pago and dt_pago.month == mes_idx_fc and dt_pago.year == int(anio_sel_fc):
+                                registros_flujo.append({
+                                    "Fecha": dt_pago.strftime("%d/%m/%Y"),
+                                    "Categoría": "📥 Cobro de Cuota",
+                                    "Detalle": f"Cliente: {cliente_nom} ({cuota_str})",
+                                    "Ingreso (+)": monto_num,
+                                    "Egreso (-)": 0.0
+                                })
 
                 # 2. Traer movimientos de caja (Ingresos extras y Egresos)
                 try:
@@ -527,6 +544,7 @@ else:
             col_estado_r = next((c for c in df_resumen.columns if "ESTADO" in c.upper()), None)
             col_monto_r = next((c for c in df_resumen.columns if "MONTO" in c.upper()), None)
             col_pago_r = next((c for c in df_resumen.columns if "PAGO" in c.upper()), None)
+            col_fecha_r = next((c for c in df_resumen.columns if any(p in c.upper() for p in ["FECHA", "VENC"])), None)
 
             if col_cliente_r and col_estado_r and col_monto_r:
                 df_resumen[col_cliente_r] = df_resumen[col_cliente_r].replace(r'^\s*$', None, regex=True).ffill()
@@ -538,18 +556,16 @@ else:
 
                 for _, row in df_pagados_res.iterrows():
                     monto_num = parse_monto(row[col_monto_r])
-                    # Filtrar estrictamente por la fecha real de la columna J para el mes actual
-                    if col_pago_r and pd.notna(row[col_pago_r]) and str(row[col_pago_r]).strip() != "":
-                        val_fecha = str(row[col_pago_r]).strip()
-                        try:
-                            dt_pago = pd.to_datetime(val_fecha, format='%d/%m/%Y', errors='coerce')
-                            if pd.isna(dt_pago):
-                                dt_pago = pd.to_datetime(val_fecha, errors='coerce')
-                            
-                            if pd.notna(dt_pago) and dt_pago.month == mes_actual_num and dt_pago.year == anio_actual_num:
-                                total_cobrado_cuotas += monto_num
-                        except:
-                            pass
+                    
+                    dt_pago = None
+                    if col_pago_r and col_pago_r in row:
+                        dt_pago = parse_fecha_flexible(row[col_pago_r])
+                    
+                    if not dt_pago and col_fecha_r and col_fecha_r in row:
+                        dt_pago = parse_fecha_flexible(row[col_fecha_r])
+
+                    if dt_pago and dt_pago.month == mes_actual_num and dt_pago.year == anio_actual_num:
+                        total_cobrado_cuotas += monto_num
 
         # Calcular ingresos extras y egresos del mes actual
         total_ingresos_extras = 0.0
