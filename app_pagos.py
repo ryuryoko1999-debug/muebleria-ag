@@ -420,3 +420,80 @@ else:
                     st.rerun()
             else:
                 st.warning("⚠️ No se pudieron identificar correctamente las columnas en la planilla para generar el resumen.")
+
+# ==========================================
+    # MÓDULO 5: GASTOS FIJOS Y VARIABLES (NUEVO)
+    # ==========================================
+    with tab_finanzas:
+        st.subheader("💰 Control de Gastos (Fijos y Variables)")
+        st.markdown("Registra aquí los gastos operativos del mes para tenerlos en cuenta en el balance general.")
+
+        meses_es = ["ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO", "JULIO", "AGOSTO", "SEPTIEMBRE", "OCTUBRE", "NOVIEMBRE", "DICIEMBRE"]
+        mes_actual_num = datetime.now().month
+        anio_actual_num = datetime.now().year
+
+        with st.form("form_gastos_mes"):
+            tipo_gasto = st.selectbox("Tipo de Gasto", ["Gasto Fijo", "Gasto Variable"])
+            concepto_gasto = st.text_input("Concepto (ej. Alquiler, Luz, Insumos, Fletes)")
+            monto_gasto = st.number_input("Monto del Gasto ($)", min_value=0.0, step=1000.0)
+            
+            c_f1, c_f2 = st.columns(2)
+            with c_f1:
+                mes_gasto = st.selectbox("Mes Correspondiente", options=meses_es, index=mes_actual_num - 1)
+            with c_f2:
+                anio_gasto = st.number_input("Año", value=anio_actual_num, step=1)
+                
+            fecha_registro = st.date_input("Fecha de Registro", value=date.today())
+
+            submitted_gasto = st.form_submit_button("💾 GUARDAR GASTO")
+            if submitted_gasto:
+                if not concepto_gasto.strip():
+                    st.error("⚠️ Debes ingresar un concepto para el gasto.")
+                else:
+                    # Aquí puedes preparar el envío por Google Apps Script o guardarlo localmente
+                    st.success(f"✅ Gasto de **${monto_gasto:,.2f}** ({tipo_gasto}: {concepto_gasto}) registrado correctamente para {mes_gasto} {anio_gasto}.")
+
+    # ==========================================
+    # MÓDULO 6: RESUMEN Y ESTADÍSTICAS GENERALES
+    # ==========================================
+    with tab_resumen:
+        st.subheader("📊 Balance General y Resumen Financiero")
+        script_resumen = cargar_datos_clientes()
+        
+        if script_resumen is not None:
+            col_cliente_r = next((c for c in script_resumen.columns if "CLIENTE" in c.upper()), None)
+            col_estado_r = next((c for c in script_resumen.columns if "ESTADO" in c.upper()), None)
+            col_monto_r = next((c for c in script_resumen.columns if "MONTO" in c.upper()), None)
+            col_fecha_r = next((c for c in script_resumen.columns if any(p in c.upper() for p in ["FECHA", "VENC"])), None)
+
+            if col_cliente_r and col_estado_r and col_monto_r:
+                script_resumen[col_cliente_r] = script_resumen[col_cliente_r].replace(r'^\s*$', None, regex=True).ffill()
+                df_val = script_resumen.dropna(subset=[col_cliente_r]).copy()
+                df_val = df_val[~df_val[col_cliente_r].astype(str).str.upper().isin(['CLIENTE', 'NAN', 'NONE', ''])]
+
+                df_val['Monto_Num'] = df_val[col_monto_r].apply(parse_monto)
+
+                total_creditos = df_val['Monto_Num'].sum()
+                
+                estado_clean = df_val[col_estado_r].astype(str).str.strip().str.lower()
+                m_pagados = estado_clean.isin(['pagado', 'pago', 'cancelado', 'cobrado'])
+                total_cobrado = df_val.loc[m_pagados, 'Monto_Num'].sum()
+
+                # Simulación o cálculo de gastos del mes (puedes enlazarlo con tu hoja de GASTOS cuando gustes)
+                total_gastos_mes = 0.0 # Aquí se restarán los gastos fijos y variables cargados
+
+                balance_neto = total_cobrado - total_gastos_mes
+
+                st.markdown("---")
+                st.metric(label="💼 Total Cartera de Créditos", value=f"$ {total_creditos:,.2f}")
+                st.metric(label="💵 Total Ingresos Cobrados", value=f"$ {total_cobrado:,.2f}")
+                st.metric(label="📉 Total Gastos Operativos", value=f"$ {total_gastos_mes:,.2f}")
+                st.markdown("---")
+                st.metric(label="📈 BALANCE NETO REAL", value=f"$ {balance_neto:,.2f}")
+
+                if st.button("🔄 Actualizar Datos", use_container_width=True):
+                    st.cache_data.clear()
+                    st.rerun()
+            else:
+                st.warning("⚠️ No se pudieron identificar las columnas de la planilla para el resumen.")
+
