@@ -350,7 +350,7 @@ else:
                 else:
                     st.warning("⚠️ Configura la URL del Apps Script en la variable `SCRIPT_URL`.")
 
-    # ==========================================
+   # ==========================================
     # MÓDULO 3: INGRESOS EXTRAS Y GASTOS (CAJA)
     # ==========================================
     with tab_finanzas:
@@ -360,9 +360,9 @@ else:
         with st.form("form_caja"):
             tipo_movimiento = st.selectbox(
                 "Tipo de Movimiento", 
-                ["➕ Ingreso Extra (Venta contado, trabajo extra)", "➖ Gasto Fijo (Alquiler, luz, servicios)", "➖ Gasto Variable (Insumos, materiales)", "💳 Préstamo / Financiero (Cuota préstamo)"]
+                ["➕ Ingreso Extra", "➖ Gasto Fijo", "➖ Gasto Variable", "💳 Préstamo / Financiero"]
             )
-            concepto_mov = st.text_input("Concepto (ej. Venta mesa contado, Compra hierro estructural, Luz cooperativa)")
+            concepto_mov = st.text_input("Concepto (ej. Venta mesa contado, Compra hierro)")
             monto_mov = st.number_input("Monto ($)", min_value=0.0, step=1000.0)
             
             c_m1, c_m2 = st.columns(2)
@@ -378,26 +378,44 @@ else:
                 if not concepto_mov.strip():
                     st.error("⚠️ Debes ingresar un concepto.")
                 else:
-                    # Aquí puedes guardar en una solapa de ingresos/egresos en tu Google Sheet mediante el Apps Script
-                    # De momento se muestra el éxito en pantalla de forma local/simulada hasta que enlacemos la solapa
-                    is_ingreso = "➕" in tipo_movimiento
-                    if is_ingreso:
-                        st.success(f"✅ Ingreso Extra registrado: **{concepto_mov}** por **+${monto_mov:,.2f}** ({mes_mov} {anio_mov}).")
-                    else:
-                        st.success(f"✅ Egreso registrado: [{tipo_movimiento}] **{concepto_mov}** por **-${monto_mov:,.2f}** ({mes_mov} {anio_mov}).")
-                    
-                    # Nota para la sincronización con Google Sheets: 
-                    # Asegúrate de enviar esto a tu Apps Script si creaste una solapa separada llamada 'Ingresos_Egresos'.
+                    payload = {
+                        "action": "nuevo_movimiento",
+                        "tipo": tipo_movimiento,
+                        "concepto": concepto_mov.strip().upper(),
+                        "monto": float(monto_mov),
+                        "mes": mes_mov,
+                        "anio": int(anio_mov),
+                        "fecha": fecha_mov.strftime("%d/%m/%Y")
+                    }
+                    try:
+                        res = requests.post(SCRIPT_URL, data=json.dumps(payload), headers={'Content-Type': 'application/json'}, timeout=15)
+                        if res.status_code == 200 and "OK" in res.text:
+                            st.success(f"🎉 Movimiento guardado exitosamente en Google Sheets.")
+                            st.cache_data.clear()
+                        else:
+                            st.error(f"Error al guardar en Google Sheets: {res.text}")
+                    except Exception as e:
+                        st.error(f"Error de conexión: {e}")
 
     # ==========================================
     # MÓDULO 4: RESUMEN Y FLUJO DE EFECTIVO
     # ==========================================
     with tab_resumen:
         st.subheader("📊 Flujo de Efectivo y Balance del Mes")
-        st.markdown("Conoce cómo se movió tu efectivo este mes sumando cobros de cuotas, ingresos extras y restando tus gastos.")
+        st.markdown(f"Resumen financiero para **{meses_es[mes_actual_num-1]} {anio_actual_num}**.")
 
         df_resumen = cargar_datos()
         
+        # Cargar movimientos de caja desde Apps Script
+        movimientos_caja = []
+        try:
+            res_caja = requests.get(SCRIPT_URL, params={"action": "getCaja"}, timeout=10)
+            if res_caja.status_code == 200:
+                movimientos_caja = res_caja.json()
+        except:
+            pass
+
+        total_cobrado_cuotas = 0.0
         if df_resumen is not None:
             col_cliente_r = next((c for c in df_resumen.columns if "CLIENTE" in c.upper()), None)
             col_estado_r = next((c for c in df_resumen.columns if "ESTADO" in c.upper()), None)
@@ -407,37 +425,41 @@ else:
                 df_resumen[col_cliente_r] = df_resumen[col_cliente_r].replace(r'^\s*$', None, regex=True).ffill()
                 df_val = df_resumen.dropna(subset=[col_cliente_r]).copy()
                 df_val = df_val[~df_val[col_cliente_r].astype(str).str.upper().isin(['CLIENTE', 'NAN', 'NONE', ''])]
-
                 df_val['Monto_Num'] = df_val[col_monto_r].apply(parse_monto)
-
-                total_creditos = df_val['Monto_Num'].sum()
                 
                 estado_clean = df_val[col_estado_r].astype(str).str.strip().str.lower()
                 m_pagados = estado_clean.isin(['pagado', 'pago', 'cancelado', 'cobrado'])
                 total_cobrado_cuotas = df_val.loc[m_pagados, 'Monto_Num'].sum()
 
-                # Simulación / Cálculo de ingresos extras y gastos cargados en el mes
-                # (Puedes sumar aquí las variables de tu solapa de Ingresos/Egresos de Google Sheets)
-                total_ingresos_extras = 0.0  # Se conectará con tu solapa de Ingresos extras
-                total_egresos_mes = 0.0      # Se conectará con tu solapa de Gastos / Préstamos
+        # Calcular ingresos extras y egresos del mes actual
+        total_ingresos_extras = 0.0
+        total_egresos_mes = 0.0
 
-                ingresos_totales_efectivo = total_cobrado_cuotas + total_ingresos_extras
-                flujo_caja_neto = ingresos_totales_efectivo - total_egresos_mes
+        mes_nombre_actual = meses_es[mes_actual_num - 1]
+        for m in movimientos_caja:
+            if str(m.get("mes")).strip().upper() == mes_nombre_actual and int(m.get("anio", anio_actual_num)) == anio_actual_num:
+                monto_val = float(m.get("monto", 0))
+                tipo = str(m.get("tipo"))
+                if "➕" in tipo:
+                    total_ingresos_extras += monto_val
+                else:
+                    total_egresos_mes += monto_val
 
-                st.markdown("---")
-                col_m1, col_m2 = st.columns(2)
-                with col_m1:
-                    st.metric(label="📥 Cobros de Cuotas", value=f"$ {total_cobrado_cuotas:,.2f}")
-                with col_m2:
-                    st.metric(label="➕ Ingresos Extras", value=f"$ {total_ingresos_extras:,.2f}")
-                
-                st.metric(label="💵 INGRESOS TOTALES EN EFECTIVO", value=f"$ {ingresos_totales_efectivo:,.2f}")
-                st.metric(label="📉 TOTAL EGRESOS Y GASTOS", value=f"$ {total_egresos_mes:,.2f}")
-                st.markdown("---")
-                st.metric(label="📈 FLUJO NETO DE CAJA (Efectivo Final)", value=f"$ {flujo_caja_neto:,.2f}")
+        ingresos_totales_efectivo = total_cobrado_cuotas + total_ingresos_extras
+        flujo_caja_neto = ingresos_totales_efectivo - total_egresos_mes
 
-                if st.button("🔄 Actualizar Datos y Recalcular", use_container_width=True):
-                    st.cache_data.clear()
-                    st.rerun()
-            else:
-                st.warning("⚠️ No se pudieron identificar las columnas de la planilla principal para el resumen.")
+        st.markdown("---")
+        col_m1, col_m2 = st.columns(2)
+        with col_m1:
+            st.metric(label="📥 Cobros de Cuotas", value=f"$ {total_cobrado_cuotas:,.2f}")
+        with col_m2:
+            st.metric(label="➕ Ingresos Extras", value=f"$ {total_ingresos_extras:,.2f}")
+        
+        st.metric(label="💵 INGRESOS TOTALES EN EFECTIVO", value=f"$ {ingresos_totales_efectivo:,.2f}")
+        st.metric(label="📉 TOTAL EGRESOS Y GASTOS", value=f"$ {total_egresos_mes:,.2f}")
+        st.markdown("---")
+        st.metric(label="📈 FLUJO NETO DE CAJA (Efectivo Final)", value=f"$ {flujo_caja_neto:,.2f}")
+
+        if st.button("🔄 Actualizar Datos y Recalcular", use_container_width=True):
+            st.cache_data.clear()
+            st.rerun()
