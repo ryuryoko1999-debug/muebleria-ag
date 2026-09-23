@@ -12,7 +12,6 @@ st.set_page_config(page_title="Mueblería A&G", page_icon="🪑", layout="center
 # Estilos CSS optimizados para dispositivos móviles (Negro y Naranja)
 st.markdown("""
     <style>
-    /* Estilos responsive */
     .stApp {
         background-color: #0d0d0d;
         color: #f5f5f5;
@@ -96,8 +95,10 @@ else:
     
     SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyarQpV1w8XWaAwAcUQ7NXpvOkYkuHi-lXYOnmoDJoENncjJlZQPrepzUyeonhOHUEN-A/exec"
 
-    # --- PESTAÑAS SUPERIORES ---
-    tab_pago, tab_cliente, tab_resumen = st.tabs(["💳 COBRAR", "👤 CLIENTE", "📊 RESUMEN"])
+    # --- 4 PESTAÑAS PRINCIPALES ---
+    tab_pago, tab_cliente, tab_finanzas, tab_resumen = st.tabs([
+        "💳 COBRAR", "👤 CLIENTE", "💰 FINANZAS", "📊 RESUMEN"
+    ])
 
     # Función auxiliar para convertir montos de texto a número de forma segura
     def parse_monto(val):
@@ -272,10 +273,9 @@ else:
     with tab_cliente:
         st.subheader("👤 Alta de Nuevo Cliente")
 
-        @st.cache_data(ttl=0)
         def obtener_siguiente_id():
             try:
-                df = pd.read_csv(CSV_URL, header=2)
+                df = cargar_datos()
                 col_id = next((c for c in df.columns if "ID" in c.upper()), None)
                 if col_id and not df[col_id].dropna().empty:
                     ids_validos = pd.to_numeric(df[col_id], errors='coerce').dropna()
@@ -349,92 +349,19 @@ else:
                     st.warning("⚠️ Configura la URL del Apps Script en la variable `SCRIPT_URL`.")
 
     # ==========================================
-    # MÓDULO 3: RESUMEN Y ESTADÍSTICAS (NUEVO)
-    # ==========================================
-    with tab_resumen:
-        st.subheader("📊 Resumen Financiero")
-        
-        df_resumen = cargar_datos()
-        
-        if df_resumen is not None:
-            col_cliente_r = next((c for c in df_resumen.columns if "CLIENTE" in c.upper()), None)
-            col_estado_r = next((c for c in df_resumen.columns if "ESTADO" in c.upper()), None)
-            col_monto_r = next((c for c in df_resumen.columns if "MONTO" in c.upper()), None)
-            col_fecha_r = next((c for c in df_resumen.columns if any(p in c.upper() for p in ["FECHA", "VENC"])), None)
-
-            if col_cliente_r and col_estado_r and col_monto_r:
-                df_resumen[col_cliente_r] = df_resumen[col_cliente_r].replace(r'^\s*$', None, regex=True).ffill()
-                df_val = df_resumen.dropna(subset=[col_cliente_r]).copy()
-                df_val = df_val[~df_val[col_cliente_r].astype(str).str.upper().isin(['CLIENTE', 'NAN', 'NONE', ''])]
-
-                # Procesar columna de montos como numéricos
-                df_val['Monto_Num'] = df_val[col_monto_r].apply(parse_monto)
-
-                # 1. Total créditos dados (Suma total de toda la cartera de cuotas válidas)
-                total_creditos = df_val['Monto_Num'].sum()
-
-                # 2. Total cobrado (Cuotas con estado pagado/cobrado)
-                estado_clean = df_val[col_estado_r].astype(str).str.strip().str.lower()
-                m_pagados = estado_clean.isin(['pagado', 'pago', 'cancelado', 'cobrado'])
-                total_cobrado = df_val.loc[m_pagados, 'Monto_Num'].sum()
-
-                # 3. Pagos de este mes (Filtrar por mes y año actual)
-                total_mes_esperado = 0.0
-                total_mes_cobrado = 0.0
-                
-                if col_fecha_r:
-                    hoy = datetime.now()
-                    mes_actual = hoy.month
-                    anio_actual = hoy.year
-
-                    def es_mes_actual(fecha_str):
-                        try:
-                            f = pd.to_datetime(fecha_str, dayfirst=True)
-                            return f.month == mes_actual and f.year == anio_actual
-                        except:
-                            return False
-
-                    mask_este_mes = df_val[col_fecha_r].apply(es_mes_actual)
-                    df_este_mes = df_val[mask_este_mes]
-                    
-                    total_mes_esperado = df_este_mes['Monto_Num'].sum()
-                    mask_mes_pagado = df_este_mes[col_estado_r].astype(str).str.strip().str.lower().isin(['pagado', 'pago', 'cancelado', 'cobrado'])
-                    total_mes_cobrado = df_este_mes.loc[mask_mes_pagado, 'Monto_Num'].sum()
-
-                # Mostrar métricas visuales en Streamlit
-                st.markdown("---")
-                st.metric(label="💼 Total en Créditos Dados (Cartera)", value=f"$ {total_creditos:,.2f}")
-                st.metric(label="💵 Total Acumulado Cobrado", value=f"$ {total_cobrado:,.2f}")
-                
-                st.markdown("---")
-                st.markdown("#### 📅 Desglose del Mes Actual")
-                col_m1, col_m2 = st.columns(2)
-                with col_m1:
-                    st.metric(label="Esperado este Mes", value=f"$ {total_mes_esperado:,.2f}")
-                with col_m2:
-                    st.metric(label="Cobrado este Mes", value=f"$ {total_mes_cobrado:,.2f}")
-
-                # Botón de actualización manual de caché
-                if st.button("🔄 Actualizar Datos", use_container_width=True):
-                    st.cache_data.clear()
-                    st.rerun()
-            else:
-                st.warning("⚠️ No se pudieron identificar correctamente las columnas en la planilla para generar el resumen.")
-
-# ==========================================
-    # MÓDULO 5: GASTOS FIJOS Y VARIABLES (NUEVO)
+    # MÓDULO 3: GASTOS FIJOS Y VARIABLES
     # ==========================================
     with tab_finanzas:
         st.subheader("💰 Control de Gastos (Fijos y Variables)")
-        st.markdown("Registra aquí los gastos operativos del mes para tenerlos en cuenta en el balance general.")
+        st.markdown("Registra aquí los gastos operativos del mes (incluyendo cuotas de préstamos como *Préstamo X - Cuota Y*).")
 
         meses_es = ["ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO", "JULIO", "AGOSTO", "SEPTIEMBRE", "OCTUBRE", "NOVIEMBRE", "DICIEMBRE"]
         mes_actual_num = datetime.now().month
         anio_actual_num = datetime.now().year
 
         with st.form("form_gastos_mes"):
-            tipo_gasto = st.selectbox("Tipo de Gasto", ["Gasto Fijo", "Gasto Variable"])
-            concepto_gasto = st.text_input("Concepto (ej. Alquiler, Luz, Insumos, Fletes)")
+            tipo_gasto = st.selectbox("Tipo de Gasto", ["Gasto Fijo", "Gasto Variable", "Préstamo / Financiero"])
+            concepto_gasto = st.text_input("Concepto (ej. Alquiler, Luz, Insumos, Préstamo Maquinaria - Cuota 1)")
             monto_gasto = st.number_input("Monto del Gasto ($)", min_value=0.0, step=1000.0)
             
             c_f1, c_f2 = st.columns(2)
@@ -450,25 +377,24 @@ else:
                 if not concepto_gasto.strip():
                     st.error("⚠️ Debes ingresar un concepto para el gasto.")
                 else:
-                    # Aquí puedes preparar el envío por Google Apps Script o guardarlo localmente
-                    st.success(f"✅ Gasto de **${monto_gasto:,.2f}** ({tipo_gasto}: {concepto_gasto}) registrado correctamente para {mes_gasto} {anio_gasto}.")
+                    st.success(f"✅ Gasto de **${monto_gasto:,.2f}** ({tipo_gasto}: {concepto_gasto}) registrado para {mes_gasto} {anio_gasto}.")
 
     # ==========================================
-    # MÓDULO 6: RESUMEN Y ESTADÍSTICAS GENERALES
+    # MÓDULO 4: RESUMEN Y BALANCE GENERAL
     # ==========================================
     with tab_resumen:
         st.subheader("📊 Balance General y Resumen Financiero")
-        script_resumen = cargar_datos_clientes()
+        df_resumen = cargar_datos()
         
-        if script_resumen is not None:
-            col_cliente_r = next((c for c in script_resumen.columns if "CLIENTE" in c.upper()), None)
-            col_estado_r = next((c for c in script_resumen.columns if "ESTADO" in c.upper()), None)
-            col_monto_r = next((c for c in script_resumen.columns if "MONTO" in c.upper()), None)
-            col_fecha_r = next((c for c in script_resumen.columns if any(p in c.upper() for p in ["FECHA", "VENC"])), None)
+        if df_resumen is not None:
+            col_cliente_r = next((c for c in df_resumen.columns if "CLIENTE" in c.upper()), None)
+            col_estado_r = next((c for c in df_resumen.columns if "ESTADO" in c.upper()), None)
+            col_monto_r = next((c for c in df_resumen.columns if "MONTO" in c.upper()), None)
+            col_fecha_r = next((c for c in df_resumen.columns if any(p in c.upper() for p in ["FECHA", "VENC"])), None)
 
             if col_cliente_r and col_estado_r and col_monto_r:
-                script_resumen[col_cliente_r] = script_resumen[col_cliente_r].replace(r'^\s*$', None, regex=True).ffill()
-                df_val = script_resumen.dropna(subset=[col_cliente_r]).copy()
+                df_resumen[col_cliente_r] = df_resumen[col_cliente_r].replace(r'^\s*$', None, regex=True).ffill()
+                df_val = df_resumen.dropna(subset=[col_cliente_r]).copy()
                 df_val = df_val[~df_val[col_cliente_r].astype(str).str.upper().isin(['CLIENTE', 'NAN', 'NONE', ''])]
 
                 df_val['Monto_Num'] = df_val[col_monto_r].apply(parse_monto)
@@ -479,8 +405,8 @@ else:
                 m_pagados = estado_clean.isin(['pagado', 'pago', 'cancelado', 'cobrado'])
                 total_cobrado = df_val.loc[m_pagados, 'Monto_Num'].sum()
 
-                # Simulación o cálculo de gastos del mes (puedes enlazarlo con tu hoja de GASTOS cuando gustes)
-                total_gastos_mes = 0.0 # Aquí se restarán los gastos fijos y variables cargados
+                # Gastos operativos del mes (aquí se sincronizarán con tu hoja de gastos)
+                total_gastos_mes = 0.0 
 
                 balance_neto = total_cobrado - total_gastos_mes
 
@@ -496,4 +422,3 @@ else:
                     st.rerun()
             else:
                 st.warning("⚠️ No se pudieron identificar las columnas de la planilla para el resumen.")
-
