@@ -350,12 +350,12 @@ else:
                 else:
                     st.warning("⚠️ Configura la URL del Apps Script en la variable `SCRIPT_URL`.")
 
-   # ==========================================
+  # ==========================================
     # MÓDULO 3: INGRESOS EXTRAS Y GASTOS (CAJA)
     # ==========================================
     with tab_finanzas:
         st.subheader("💰 Control de Ingresos y Egresos del Mes")
-        st.markdown("Registra aquí **tanto los ingresos extras** (ventas contado, reparaciones, señas) como los **gastos y préstamos** del mes.")
+        st.markdown("Registra aquí **ingresos extras** (ventas contado, reparaciones) y los **gastos o préstamos** del mes.")
 
         with st.form("form_caja"):
             tipo_movimiento = st.selectbox(
@@ -367,9 +367,9 @@ else:
             
             c_m1, c_m2 = st.columns(2)
             with c_m1:
-                mes_mov = st.selectbox("Mes Correspondiente", options=meses_es, index=mes_actual_num - 1)
+                mes_mov = st.selectbox("Mes Correspondiente", options=meses_es, index=mes_actual_num - 1, key="mes_caja_form")
             with c_m2:
-                anio_mov = st.number_input("Año", value=anio_actual_num, step=1)
+                anio_mov = st.number_input("Año", value=anio_actual_num, step=1, key="anio_caja_form")
                 
             fecha_mov = st.date_input("Fecha del Movimiento", value=date.today())
 
@@ -393,9 +393,112 @@ else:
                             st.success(f"🎉 Movimiento guardado exitosamente en Google Sheets.")
                             st.cache_data.clear()
                         else:
-                            st.error(f"Error al guardar en Google Sheets: {res.text}")
+                            st.error(f"Error al guardar: {res.text}")
                     except Exception as e:
                         st.error(f"Error de conexión: {e}")
+
+        st.markdown("---")
+        st.markdown("### 📋 Planilla de Flujo de Caja Mensual")
+        st.markdown("Selecciona el mes y año para consultar la planilla detallada de todo el dinero que entró y salió.")
+
+        col_fc1, col_fc2 = st.columns(2)
+        with col_fc1:
+            mes_sel_fc = st.selectbox("Mes a Consultar", options=meses_es, index=mes_actual_num - 1, key="mes_fc")
+        with col_fc2:
+            anio_sel_fc = st.number_input("Año a Consultar", value=anio_actual_num, step=1, key="anio_fc")
+
+        if st.button("📊 MOSTRAR PLANILLA DE FLUJO DE CAJA", use_container_width=True):
+            with st.spinner("Generando planilla desde Clientes y Caja..."):
+                registros_flujo = []
+
+                # 1. Traer cobros de clientes pagados
+                df_cli = cargar_datos()
+                if df_cli is not None:
+                    col_cliente_c = next((c for c in df_cli.columns if "CLIENTE" in c.upper()), None)
+                    col_estado_c = next((c for c in df_cli.columns if "ESTADO" in c.upper()), None)
+                    col_monto_c = next((c for c in df_cli.columns if "MONTO" in c.upper()), None)
+                    col_cuota_c = next((c for c in df_cli.columns if "CUOTA" in c.upper()), None)
+                    col_pago_c = next((c for c in df_cli.columns if "PAGO" in c.upper()), None)
+
+                    if col_cliente_c and col_estado_c and col_monto_c:
+                        df_cli[col_cliente_c] = df_cli[col_cliente_c].replace(r'^\s*$', None, regex=True).ffill()
+                        df_val_c = df_cli.dropna(subset=[col_cliente_c]).copy()
+                        df_val_c = df_val_c[~df_val_c[col_cliente_c].astype(str).str.upper().isin(['CLIENTE', 'NAN', 'NONE', ''])]
+                        
+                        estado_clean = df_val_c[col_estado_c].astype(str).str.strip().str.lower()
+                        df_pagados = df_val_c[estado_clean.isin(['pagado', 'pago', 'cancelado', 'cobrado'])].copy()
+
+                        for idx, row in df_pagados.iterrows():
+                            monto_num = parse_monto(row[col_monto_c])
+                            cliente_nom = str(row[col_cliente_c]).strip().upper()
+                            cuota_str = str(row[col_cuota_c]) if col_cuota_c else "Cuota"
+                            
+                            # Intentar obtener la fecha en que pagó
+                            fecha_efectiva = ""
+                            if col_pago_c and pd.notna(row[col_pago_c]) and str(row[col_pago_c]).strip() != "":
+                                fecha_efectiva = str(row[col_pago_c]).strip()
+                            else:
+                                # Si no tiene fecha de pago guardada, usamos la fecha general o la del mes actual
+                                fecha_efectiva = "Registrado"
+
+                            # Agregamos a la lista de ingresos por cuotas
+                            registros_flujo.append({
+                                "Fecha": fecha_efectiva,
+                                "Categoría": "📥 Cobro de Cuota",
+                                "Detalle": f"Cliente: {cliente_nom} ({cuota_str})",
+                                "Ingreso (+)": monto_num,
+                                "Egreso (-)": 0.0
+                            })
+
+                # 2. Traer movimientos de caja (Ingresos extras y Egresos)
+                try:
+                    res_caja = requests.get(SCRIPT_URL, params={"action": "getCaja"}, timeout=10)
+                    if res_caja.status_code == 200:
+                        movs = res_caja.json()
+                        for m in movs:
+                            if str(m.get("mes")).strip().upper() == mes_sel_fc and int(m.get("anio", anio_actual_num)) == anio_sel_fc:
+                                monto_val = float(m.get("monto", 0))
+                                tipo_m = str(m.get("tipo"))
+                                concepto_m = str(m.get("concepto"))
+                                fecha_m = str(m.get("fecha"))
+
+                                if "➕" in tipo_m:
+                                    registros_flujo.append({
+                                        "Fecha": fecha_m,
+                                        "Categoría": "➕ Ingreso Extra",
+                                        "Detalle": concepto_m,
+                                        "Ingreso (+)": monto_val,
+                                        "Egreso (-)": 0.0
+                                    })
+                                else:
+                                    registros_flujo.append({
+                                        "Fecha": fecha_m,
+                                        "Categoría": f"📉 {tipo_m.replace('➖ ', '').replace('💳 ', '')}",
+                                        "Detalle": concepto_m,
+                                        "Ingreso (+)": 0.0,
+                                        "Egreso (-)": monto_val
+                                    })
+                except Exception as e:
+                    st.warning(f"No se pudieron cargar los movimientos de caja: {e}")
+
+                if len(registros_flujo) > 0:
+                    df_flujo = pd.DataFrame(registros_flujo)
+                    
+                    total_ingresos = df_flujo["Ingreso (+)"].sum()
+                    total_egresos = df_flujo["Egreso (-)"].sum()
+                    neto_caja = total_ingresos - total_egresos
+
+                    st.markdown(f"#### 📊 Resumen de Caja: {mes_sel_fc} {anio_sel_fc}")
+                    
+                    col_r1, col_r2, col_r3 = st.columns(3)
+                    col_r1.metric("Total Ingresos", f"$ {total_ingresos:,.2f}")
+                    col_r2.metric("Total Egresos", f"$ {total_egresos:,.2f}")
+                    col_r3.metric("Neto en Efectivo", f"$ {neto_caja:,.2f}")
+
+                    st.markdown("---")
+                    st.dataframe(df_flujo, use_container_width=True)
+                else:
+                    st.info(f"ℹ️ No hay movimientos registrados para **{mes_sel_fc} {anio_sel_fc}**.")
 
     # ==========================================
     # MÓDULO 4: RESUMEN Y FLUJO DE EFECTIVO
