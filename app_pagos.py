@@ -470,14 +470,14 @@ else:
                                     "Egreso (-)": 0.0
                                 })
 
-                # 2. Traer movimientos de caja (Ingresos extras y Egresos)
+                # 2. Traer movimientos de caja (Ingresos extras y Egresos) de forma segura con parse_monto
                 try:
                     res_caja = requests.get(SCRIPT_URL, params={"action": "getCaja"}, timeout=10)
                     if res_caja.status_code == 200:
                         movs = res_caja.json()
                         for m in movs:
                             if str(m.get("mes")).strip().upper() == mes_sel_fc and int(m.get("anio", anio_actual_num)) == anio_sel_fc:
-                                monto_val = float(m.get("monto", 0))
+                                monto_val = parse_monto(m.get("monto", 0))
                                 tipo_m = str(m.get("tipo"))
                                 concepto_m = str(m.get("concepto"))
                                 fecha_m = str(m.get("fecha"))
@@ -529,7 +529,7 @@ else:
 
         df_resumen = cargar_datos()
         
-        # Cargar movimientos de caja desde Apps Script
+        # Cargar movimientos de caja desde Apps Script de forma segura con parse_monto
         movimientos_caja = []
         try:
             res_caja = requests.get(SCRIPT_URL, params={"action": "getCaja"}, timeout=10)
@@ -567,14 +567,14 @@ else:
                     if dt_pago and dt_pago.month == mes_actual_num and dt_pago.year == anio_actual_num:
                         total_cobrado_cuotas += monto_num
 
-        # Calcular ingresos extras y egresos del mes actual
+        # Calcular ingresos extras y egresos del mes actual de forma segura con parse_monto
         total_ingresos_extras = 0.0
         total_egresos_mes = 0.0
 
         mes_nombre_actual = meses_es[mes_actual_num - 1]
         for m in movimientos_caja:
             if str(m.get("mes")).strip().upper() == mes_nombre_actual and int(m.get("anio", anio_actual_num)) == anio_actual_num:
-                monto_val = float(m.get("monto", 0))
+                monto_val = parse_monto(m.get("monto", 0))
                 tipo = str(m.get("tipo"))
                 if "➕" in tipo:
                     total_ingresos_extras += monto_val
