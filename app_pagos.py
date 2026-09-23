@@ -580,9 +580,9 @@ else:
         st.markdown("---")
         st.metric(label="📈 FLUJO NETO DE CAJA (Efectivo Final)", value=f"$ {flujo_caja_neto:,.2f}")
 
-        if st.button("🔄 Actualizar Datos y Recalcular", use_container_width=True):
-            st.cache_data.clear()
-            st.rerun()
+     if st.button("🔄 Actualizar Datos y Recalcular", use_container_width=True, key="btn_actualizar_resumen"):
+    st.cache_data.clear()
+    st.rerun()
     # ==========================================
     # MÓDULO 4: RESUMEN Y FLUJO DE EFECTIVO
     # ==========================================
