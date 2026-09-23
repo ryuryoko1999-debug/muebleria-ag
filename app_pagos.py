@@ -139,12 +139,81 @@ else:
     meses_es = ["ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO", "JULIO", "AGOSTO", "SEPTIEMBRE", "OCTUBRE", "NOVIEMBRE", "DICIEMBRE"]
     mes_actual_num = datetime.now().month
     anio_actual_num = datetime.now().year
+    mes_actual_nombre = meses_es[mes_actual_num - 1]
 
     # ==========================================
     # MÓDULO 1: REGISTRAR PAGO (Cuotas Clientes)
     # ==========================================
     with tab_pago:
         st.subheader("💳 Registrar Cobro de Cuota")
+        
+        # Botón / Sección para ver estado de cobranza del mes
+        if "ver_estado_mes" not in st.session_state:
+            st.session_state["ver_estado_mes"] = False
+
+        if st.button("📋 Ver Estado de Cobranza del Mes (" + mes_actual_nombre + ")", key="btn_toggle_estado"):
+            st.session_state["ver_estado_mes"] = not st.session_state["ver_estado_mes"]
+
+        if st.session_state["ver_estado_mes"]:
+            st.markdown(f"### 📊 Reporte del Mes: {mes_actual_nombre} {anio_actual_num}")
+            df_rep = cargar_datos()
+            if df_rep is not None:
+                col_c_rep = next((c for c in df_rep.columns if "CLIENTE" in c.upper()), None)
+                col_cu_rep = next((c for c in df_rep.columns if "CUOTA" in c.upper()), None)
+                col_st_rep = next((c for c in df_rep.columns if "ESTADO" in c.upper()), None)
+                col_mo_rep = next((c for c in df_rep.columns if "MONTO" in c.upper()), None)
+                col_me_rep = next((c for c in df_rep.columns if "MES" in c.upper()), None)
+                col_mu_rep = next((c for c in df_rep.columns if any(p in c.upper() for p in ["MUEBLE", "CONCEPTO", "PRODUCTO"])), None)
+
+                if col_c_rep and col_st_rep:
+                    df_rep[col_c_rep] = df_rep[col_c_rep].replace(r'^\s*$', None, regex=True).ffill()
+                    if col_mu_rep:
+                        df_rep[col_mu_rep] = df_rep[col_mu_rep].ffill()
+                    if col_me_rep:
+                        df_rep[col_me_rep] = df_rep[col_me_rep].ffill()
+
+                    df_v_rep = df_rep.dropna(subset=[col_c_rep]).copy()
+                    df_v_rep = df_v_rep[~df_v_rep[col_c_rep].astype(str).str.upper().isin(['CLIENTE', 'NAN', 'NONE', ''])]
+
+                    # Filtrar por mes actual si existe la columna mes
+                    if col_me_rep:
+                        df_mes_rep = df_v_rep[df_v_rep[col_me_rep].astype(str).str.strip().str.upper() == mes_actual_nombre].copy()
+                    else:
+                        df_mes_rep = df_v_rep.copy()
+
+                    est_clean = df_mes_rep[col_st_rep].astype(str).str.strip().str.lower()
+                    df_pend = df_mes_rep[~est_clean.isin(['pagado', 'pago', 'cancelado', 'cobrado'])]
+                    df_pag = df_mes_rep[est_clean.isin(['pagado', 'pago', 'cancelado', 'cobrado'])]
+
+                    st.markdown("#### ⏳ Faltan Pagar (Pendientes)")
+                    if not df_pend.empty:
+                        lista_pend = []
+                        for _, r in df_pend.iterrows():
+                            lista_pend.append({
+                                "Cliente": str(r[col_c_rep]).strip().upper(),
+                                "Producto": str(r[col_mu_rep]) if col_mu_rep else "-",
+                                "Cuota": str(r[col_cu_rep]) if col_cu_rep else "-",
+                                "Monto": str(r[col_mo_rep]) if col_mo_rep else "-"
+                            })
+                        st.dataframe(pd.DataFrame(lista_pend), use_container_width=True)
+                    else:
+                        st.success("🎉 ¡No hay cuotas pendientes para este mes!")
+
+                    st.markdown("#### ✅ Ya Pagaron")
+                    if not df_pag.empty:
+                        lista_pag = []
+                        for _, r in df_pag.iterrows():
+                            lista_pag.append({
+                                "Cliente": str(r[col_c_rep]).strip().upper(),
+                                "Producto": str(r[col_mu_rep]) if col_mu_rep else "-",
+                                "Cuota": str(r[col_cu_rep]) if col_cu_rep else "-",
+                                "Monto": str(r[col_mo_rep]) if col_mo_rep else "-"
+                            })
+                        st.dataframe(pd.DataFrame(lista_pag), use_container_width=True)
+                    else:
+                        st.info("ℹ️ Todavía no hay pagos registrados en este mes.")
+            st.markdown("---")
+
         df = cargar_datos()
 
         if df is not None:
