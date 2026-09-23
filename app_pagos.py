@@ -61,7 +61,7 @@ if "autenticado" not in st.session_state:
 
 def pantalla_login():
     st.markdown("<h2 style='text-align: center; color: #ff6600;'>🪑 MUEBLERÍA A&G</h2>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align: center; color: #aaa;'>Gestión Móvil de Cobros</p>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; color: #aaa;'>Gestión Móvil de Cobros y Caja</p>", unsafe_allow_html=True)
     st.markdown("---")
     
     usuario = st.text_input("👤 Usuario")
@@ -97,7 +97,7 @@ else:
 
     # --- 4 PESTAÑAS PRINCIPALES ---
     tab_pago, tab_cliente, tab_finanzas, tab_resumen = st.tabs([
-        "💳 COBRAR", "👤 CLIENTE", "💰 FINANZAS", "📊 RESUMEN"
+        "💳 COBRAR", "👤 CLIENTE", "💰 CAJA & GASTOS", "📊 RESUMEN"
     ])
 
     # Función auxiliar para convertir montos de texto a número de forma segura
@@ -118,11 +118,15 @@ else:
             st.error(f"Error al conectar con la planilla: {e}")
             return None
 
+    meses_es = ["ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO", "JULIO", "AGOSTO", "SEPTIEMBRE", "OCTUBRE", "NOVIEMBRE", "DICIEMBRE"]
+    mes_actual_num = datetime.now().month
+    anio_actual_num = datetime.now().year
+
     # ==========================================
-    # MÓDULO 1: REGISTRAR PAGO
+    # MÓDULO 1: REGISTRAR PAGO (Cuotas Clientes)
     # ==========================================
     with tab_pago:
-        st.subheader("💳 Registrar Cobro")
+        st.subheader("💳 Registrar Cobro de Cuota")
         df = cargar_datos()
 
         if df is not None:
@@ -312,8 +316,6 @@ else:
                 st.error("⚠️ Por favor completa el Nombre del Cliente y el Mueble/Producto.")
             else:
                 cuotas_list = []
-                meses_es = ["ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO", "JULIO", "AGOSTO", "SEPTIEMBRE", "OCTUBRE", "NOVIEMBRE", "DICIEMBRE"]
-                
                 for i in range(1, num_cuotas + 1):
                     fecha_cuota = fecha_primer_venc + relativedelta(months=i-1)
                     try:
@@ -349,48 +351,57 @@ else:
                     st.warning("⚠️ Configura la URL del Apps Script en la variable `SCRIPT_URL`.")
 
     # ==========================================
-    # MÓDULO 3: GASTOS FIJOS Y VARIABLES
+    # MÓDULO 3: INGRESOS EXTRAS Y GASTOS (CAJA)
     # ==========================================
     with tab_finanzas:
-        st.subheader("💰 Control de Gastos (Fijos y Variables)")
-        st.markdown("Registra aquí los gastos operativos del mes (incluyendo cuotas de préstamos como *Préstamo X - Cuota Y*).")
+        st.subheader("💰 Control de Ingresos y Egresos del Mes")
+        st.markdown("Registra aquí **tanto los ingresos extras** (ventas contado, reparaciones, señas) como los **gastos y préstamos** del mes.")
 
-        meses_es = ["ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO", "JULIO", "AGOSTO", "SEPTIEMBRE", "OCTUBRE", "NOVIEMBRE", "DICIEMBRE"]
-        mes_actual_num = datetime.now().month
-        anio_actual_num = datetime.now().year
-
-        with st.form("form_gastos_mes"):
-            tipo_gasto = st.selectbox("Tipo de Gasto", ["Gasto Fijo", "Gasto Variable", "Préstamo / Financiero"])
-            concepto_gasto = st.text_input("Concepto (ej. Alquiler, Luz, Insumos, Préstamo Maquinaria - Cuota 1)")
-            monto_gasto = st.number_input("Monto del Gasto ($)", min_value=0.0, step=1000.0)
+        with st.form("form_caja"):
+            tipo_movimiento = st.selectbox(
+                "Tipo de Movimiento", 
+                ["➕ Ingreso Extra (Venta contado, trabajo extra)", "➖ Gasto Fijo (Alquiler, luz, servicios)", "➖ Gasto Variable (Insumos, materiales)", "💳 Préstamo / Financiero (Cuota préstamo)"]
+            )
+            concepto_mov = st.text_input("Concepto (ej. Venta mesa contado, Compra hierro estructural, Luz cooperativa)")
+            monto_mov = st.number_input("Monto ($)", min_value=0.0, step=1000.0)
             
-            c_f1, c_f2 = st.columns(2)
-            with c_f1:
-                mes_gasto = st.selectbox("Mes Correspondiente", options=meses_es, index=mes_actual_num - 1)
-            with c_f2:
-                anio_gasto = st.number_input("Año", value=anio_actual_num, step=1)
+            c_m1, c_m2 = st.columns(2)
+            with c_m1:
+                mes_mov = st.selectbox("Mes Correspondiente", options=meses_es, index=mes_actual_num - 1)
+            with c_m2:
+                anio_mov = st.number_input("Año", value=anio_actual_num, step=1)
                 
-            fecha_registro = st.date_input("Fecha de Registro", value=date.today())
+            fecha_mov = st.date_input("Fecha del Movimiento", value=date.today())
 
-            submitted_gasto = st.form_submit_button("💾 GUARDAR GASTO")
-            if submitted_gasto:
-                if not concepto_gasto.strip():
-                    st.error("⚠️ Debes ingresar un concepto para el gasto.")
+            submitted_mov = st.form_submit_button("💾 GUARDAR MOVIMIENTO EN CAJA", type="primary")
+            if submitted_mov:
+                if not concepto_mov.strip():
+                    st.error("⚠️ Debes ingresar un concepto.")
                 else:
-                    st.success(f"✅ Gasto de **${monto_gasto:,.2f}** ({tipo_gasto}: {concepto_gasto}) registrado para {mes_gasto} {anio_gasto}.")
+                    # Aquí puedes guardar en una solapa de ingresos/egresos en tu Google Sheet mediante el Apps Script
+                    # De momento se muestra el éxito en pantalla de forma local/simulada hasta que enlacemos la solapa
+                    is_ingreso = "➕" in tipo_movimiento
+                    if is_ingreso:
+                        st.success(f"✅ Ingreso Extra registrado: **{concepto_mov}** por **+${monto_mov:,.2f}** ({mes_mov} {anio_mov}).")
+                    else:
+                        st.success(f"✅ Egreso registrado: [{tipo_movimiento}] **{concepto_mov}** por **-${monto_mov:,.2f}** ({mes_mov} {anio_mov}).")
+                    
+                    # Nota para la sincronización con Google Sheets: 
+                    # Asegúrate de enviar esto a tu Apps Script si creaste una solapa separada llamada 'Ingresos_Egresos'.
 
     # ==========================================
-    # MÓDULO 4: RESUMEN Y BALANCE GENERAL
+    # MÓDULO 4: RESUMEN Y FLUJO DE EFECTIVO
     # ==========================================
     with tab_resumen:
-        st.subheader("📊 Balance General y Resumen Financiero")
+        st.subheader("📊 Flujo de Efectivo y Balance del Mes")
+        st.markdown("Conoce cómo se movió tu efectivo este mes sumando cobros de cuotas, ingresos extras y restando tus gastos.")
+
         df_resumen = cargar_datos()
         
         if df_resumen is not None:
             col_cliente_r = next((c for c in df_resumen.columns if "CLIENTE" in c.upper()), None)
             col_estado_r = next((c for c in df_resumen.columns if "ESTADO" in c.upper()), None)
             col_monto_r = next((c for c in df_resumen.columns if "MONTO" in c.upper()), None)
-            col_fecha_r = next((c for c in df_resumen.columns if any(p in c.upper() for p in ["FECHA", "VENC"])), None)
 
             if col_cliente_r and col_estado_r and col_monto_r:
                 df_resumen[col_cliente_r] = df_resumen[col_cliente_r].replace(r'^\s*$', None, regex=True).ffill()
@@ -403,22 +414,30 @@ else:
                 
                 estado_clean = df_val[col_estado_r].astype(str).str.strip().str.lower()
                 m_pagados = estado_clean.isin(['pagado', 'pago', 'cancelado', 'cobrado'])
-                total_cobrado = df_val.loc[m_pagados, 'Monto_Num'].sum()
+                total_cobrado_cuotas = df_val.loc[m_pagados, 'Monto_Num'].sum()
 
-                # Gastos operativos del mes (aquí se sincronizarán con tu hoja de gastos)
-                total_gastos_mes = 0.0 
+                # Simulación / Cálculo de ingresos extras y gastos cargados en el mes
+                # (Puedes sumar aquí las variables de tu solapa de Ingresos/Egresos de Google Sheets)
+                total_ingresos_extras = 0.0  # Se conectará con tu solapa de Ingresos extras
+                total_egresos_mes = 0.0      # Se conectará con tu solapa de Gastos / Préstamos
 
-                balance_neto = total_cobrado - total_gastos_mes
+                ingresos_totales_efectivo = total_cobrado_cuotas + total_ingresos_extras
+                flujo_caja_neto = ingresos_totales_efectivo - total_egresos_mes
 
                 st.markdown("---")
-                st.metric(label="💼 Total Cartera de Créditos", value=f"$ {total_creditos:,.2f}")
-                st.metric(label="💵 Total Ingresos Cobrados", value=f"$ {total_cobrado:,.2f}")
-                st.metric(label="📉 Total Gastos Operativos", value=f"$ {total_gastos_mes:,.2f}")
+                col_m1, col_m2 = st.columns(2)
+                with col_m1:
+                    st.metric(label="📥 Cobros de Cuotas", value=f"$ {total_cobrado_cuotas:,.2f}")
+                with col_m2:
+                    st.metric(label="➕ Ingresos Extras", value=f"$ {total_ingresos_extras:,.2f}")
+                
+                st.metric(label="💵 INGRESOS TOTALES EN EFECTIVO", value=f"$ {ingresos_totales_efectivo:,.2f}")
+                st.metric(label="📉 TOTAL EGRESOS Y GASTOS", value=f"$ {total_egresos_mes:,.2f}")
                 st.markdown("---")
-                st.metric(label="📈 BALANCE NETO REAL", value=f"$ {balance_neto:,.2f}")
+                st.metric(label="📈 FLUJO NETO DE CAJA (Efectivo Final)", value=f"$ {flujo_caja_neto:,.2f}")
 
-                if st.button("🔄 Actualizar Datos", use_container_width=True):
+                if st.button("🔄 Actualizar Datos y Recalcular", use_container_width=True):
                     st.cache_data.clear()
                     st.rerun()
             else:
-                st.warning("⚠️ No se pudieron identificar las columnas de la planilla para el resumen.")
+                st.warning("⚠️ No se pudieron identificar las columnas de la planilla principal para el resumen.")
