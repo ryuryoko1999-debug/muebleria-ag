@@ -147,11 +147,11 @@ else:
     with tab_pago:
         st.subheader("💳 Registrar Cobro de Cuota")
         
-        # Botón / Sección para ver estado de cobranza del mes
+        # Botón / Sección para ver estado de cobranza del mes (filtrado estrictamente por mes y año actual)
         if "ver_estado_mes" not in st.session_state:
             st.session_state["ver_estado_mes"] = False
 
-        if st.button("📋 Ver Estado de Cobranza del Mes (" + mes_actual_nombre + ")", key="btn_toggle_estado"):
+        if st.button("📋 Ver Estado de Cobranza del Mes (" + mes_actual_nombre + " " + str(anio_actual_num) + ")", key="btn_toggle_estado"):
             st.session_state["ver_estado_mes"] = not st.session_state["ver_estado_mes"]
 
         if st.session_state["ver_estado_mes"]:
@@ -162,28 +162,32 @@ else:
                 col_cu_rep = next((c for c in df_rep.columns if "CUOTA" in c.upper()), None)
                 col_st_rep = next((c for c in df_rep.columns if "ESTADO" in c.upper()), None)
                 col_mo_rep = next((c for c in df_rep.columns if "MONTO" in c.upper()), None)
-                col_me_rep = next((c for c in df_rep.columns if "MES" in c.upper()), None)
+                col_fe_rep = next((c for c in df_rep.columns if any(p in c.upper() for p in ["FECHA", "VENC"])), None)
                 col_mu_rep = next((c for c in df_rep.columns if any(p in c.upper() for p in ["MUEBLE", "CONCEPTO", "PRODUCTO"])), None)
 
                 if col_c_rep and col_st_rep:
                     df_rep[col_c_rep] = df_rep[col_c_rep].replace(r'^\s*$', None, regex=True).ffill()
                     if col_mu_rep:
                         df_rep[col_mu_rep] = df_rep[col_mu_rep].ffill()
-                    if col_me_rep:
-                        df_rep[col_me_rep] = df_rep[col_me_rep].ffill()
 
                     df_v_rep = df_rep.dropna(subset=[col_c_rep]).copy()
                     df_v_rep = df_v_rep[~df_v_rep[col_c_rep].astype(str).str.upper().isin(['CLIENTE', 'NAN', 'NONE', ''])]
 
-                    # Filtrar por mes actual si existe la columna mes
-                    if col_me_rep:
-                        df_mes_rep = df_v_rep[df_v_rep[col_me_rep].astype(str).str.strip().str.upper() == mes_actual_nombre].copy()
-                    else:
-                        df_mes_rep = df_v_rep.copy()
+                    # Filtrar estrictamente por el mes y año actual usando la fecha de vencimiento
+                    df_mes_rep_list = []
+                    for _, r in df_v_rep.iterrows():
+                        dt_venc = parse_fecha_flexible(r[col_fe_rep]) if col_fe_rep else None
+                        if dt_venc and dt_venc.month == mes_actual_num and dt_venc.year == anio_actual_num:
+                            df_mes_rep_list.append(r)
 
-                    est_clean = df_mes_rep[col_st_rep].astype(str).str.strip().str.lower()
-                    df_pend = df_mes_rep[~est_clean.isin(['pagado', 'pago', 'cancelado', 'cobrado'])]
-                    df_pag = df_mes_rep[est_clean.isin(['pagado', 'pago', 'cancelado', 'cobrado'])]
+                    if len(df_mes_rep_list) > 0:
+                        df_mes_rep = pd.DataFrame(df_mes_rep_list)
+                    else:
+                        df_mes_rep = pd.DataFrame(columns=df_v_rep.columns)
+
+                    est_clean = df_mes_rep[col_st_rep].astype(str).str.strip().str.lower() if not df_mes_rep.empty else pd.Series()
+                    df_pend = df_mes_rep[~est_clean.isin(['pagado', 'pago', 'cancelado', 'cobrado'])] if not df_mes_rep.empty else pd.DataFrame()
+                    df_pag = df_mes_rep[est_clean.isin(['pagado', 'pago', 'cancelado', 'cobrado'])] if not df_mes_rep.empty else pd.DataFrame()
 
                     st.markdown("#### ⏳ Faltan Pagar (Pendientes)")
                     if not df_pend.empty:
