@@ -147,7 +147,6 @@ else:
     with tab_pago:
         st.subheader("💳 Registrar Cobro de Cuota")
         
-        # Botón / Sección para ver estado de cobranza del mes (filtrado estrictamente por mes y año actual)
         if "ver_estado_mes" not in st.session_state:
             st.session_state["ver_estado_mes"] = False
 
@@ -173,7 +172,6 @@ else:
                     df_v_rep = df_rep.dropna(subset=[col_c_rep]).copy()
                     df_v_rep = df_v_rep[~df_v_rep[col_c_rep].astype(str).str.upper().isin(['CLIENTE', 'NAN', 'NONE', ''])]
 
-                    # Filtrar estrictamente por el mes y año actual usando la fecha de vencimiento
                     df_mes_rep_list = []
                     for _, r in df_v_rep.iterrows():
                         dt_venc = parse_fecha_flexible(r[col_fe_rep]) if col_fe_rep else None
@@ -530,7 +528,6 @@ else:
                             if col_pago_c and col_pago_c in row:
                                 dt_pago = parse_fecha_flexible(row[col_pago_c])
                             
-                            # Fallback a fecha de cuota si la columna J está vacía
                             if not dt_pago and col_fecha_c and col_fecha_c in row:
                                 dt_pago = parse_fecha_flexible(row[col_fecha_c])
 
@@ -543,7 +540,7 @@ else:
                                     "Egreso (-)": 0.0
                                 })
 
-                # 2. Traer movimientos de caja (Ingresos extras y Egresos) de forma segura con parse_monto
+                # 2. Traer movimientos de caja (Ingresos extras y Egresos) formateando correctamente la fecha
                 try:
                     res_caja = requests.get(SCRIPT_URL, params={"action": "getCaja"}, timeout=10)
                     if res_caja.status_code == 200:
@@ -553,7 +550,11 @@ else:
                                 monto_val = parse_monto(m.get("monto", 0))
                                 tipo_m = str(m.get("tipo"))
                                 concepto_m = str(m.get("concepto"))
-                                fecha_m = str(m.get("fecha"))
+                                
+                                # Formatear fecha de caja de forma limpia DD/MM/YYYY
+                                fecha_m_raw = m.get("fecha")
+                                dt_m = parse_fecha_flexible(fecha_m_raw)
+                                fecha_m = dt_m.strftime("%d/%m/%Y") if dt_m else str(fecha_m_raw)
 
                                 if "➕" in tipo_m:
                                     registros_flujo.append({
@@ -602,7 +603,6 @@ else:
 
         df_resumen = cargar_datos()
         
-        # Cargar movimientos de caja desde Apps Script de forma segura con parse_monto
         movimientos_caja = []
         try:
             res_caja = requests.get(SCRIPT_URL, params={"action": "getCaja"}, timeout=10)
@@ -640,7 +640,6 @@ else:
                     if dt_pago and dt_pago.month == mes_actual_num and dt_pago.year == anio_actual_num:
                         total_cobrado_cuotas += monto_num
 
-        # Calcular ingresos extras y egresos del mes actual de forma segura con parse_monto
         total_ingresos_extras = 0.0
         total_egresos_mes = 0.0
 
